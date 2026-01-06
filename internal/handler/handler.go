@@ -14,6 +14,7 @@ import (
 
 var (
 	ErrBadRequest = errors.New("badrequest")
+	ErrNotFound = errors.New("badrequest")
 )
 
 func validateUpdateMetrics(url *url.URL, result *model.Metrics) (error) {
@@ -23,6 +24,9 @@ func validateUpdateMetrics(url *url.URL, result *model.Metrics) (error) {
 	log.Printf("Данные запроса: %v, len: %d", values, len(values))
 
 	if len(values) != COUNT_PARAMS {
+		if len(values) > 2 {
+			return ErrNotFound
+		}
 		return ErrBadRequest
 	}
 	op := values[0]
@@ -47,6 +51,10 @@ func validateUpdateMetrics(url *url.URL, result *model.Metrics) (error) {
 			return ErrBadRequest
 		}
 	}
+
+	if result.Name == "" {
+		return ErrNotFound
+	}
 	log.Printf("Итоговая модель: %v, Операция: %s", result, op)
 	return nil
 
@@ -58,9 +66,16 @@ func UpdateMetricsHandler(repo *rep.MemStorage) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		var metric model.Metrics
 		if err := validateUpdateMetrics(r.URL, &metric); err != nil {
-			rw.WriteHeader(http.StatusBadRequest)
-			rw.Write([]byte(err.Error()))
-			return
+			if errors.Is(err, ErrNotFound){
+				rw.WriteHeader(http.StatusNotFound)
+				rw.Write([]byte(err.Error()))
+				return
+			}
+			if errors.Is(err, ErrBadRequest){
+				rw.WriteHeader(http.StatusBadRequest)
+				rw.Write([]byte(err.Error()))
+				return	
+			}			
 		}
 		
 		if metric.MType == model.Counter {

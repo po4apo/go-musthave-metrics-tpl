@@ -11,12 +11,11 @@ import (
 
 func main() {
 	if err := run(":8080"); err != nil {
-		log.Fatalf("Ошибка при запуске сервера: %w", err)
+		log.Fatalf("Ошибка при запуске сервера: %v", err)
 	}
 }
 
-
- func run(addr string) error {
+func run(addr string) error {
 	log.Printf("Запуск сервера по адрессу: %v", addr)
 
 	repo, err := rep.NewMemStorage()
@@ -26,10 +25,9 @@ func main() {
 
 	http.Handle("/update/", handler.UpdateMetricsHandler(&repo))
 
-	
 	if err = http.ListenAndServe(addr, nil); err != nil {
 		return fmt.Errorf("не удалось запустить сервер: %w", err)
 	}
 
 	return nil
- }
+}
