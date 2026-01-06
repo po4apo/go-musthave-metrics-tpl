@@ -65,6 +65,11 @@ func validateUpdateMetrics(url *url.URL, result *model.Metrics) (error) {
 func UpdateMetricsHandler(repo *rep.MemStorage) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		var metric model.Metrics
+		// if r.Method != http.MethodPost {
+		// 	rw.WriteHeader(http.StatusMethodNotAllowed)
+		// 	return
+		// }
+
 		if err := validateUpdateMetrics(r.URL, &metric); err != nil {
 			log.Printf("%v",  err)
 			if errors.Is(err, ErrNotFound){
@@ -82,7 +87,7 @@ func UpdateMetricsHandler(repo *rep.MemStorage) http.HandlerFunc {
 		if metric.MType == model.Counter {
 			repo.IncreaseValue(&metric)
 			repo.LogState()
-			rw.Header().Set("test", "test")
+			rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			rw.WriteHeader(http.StatusOK)
 			rw.Write([]byte("Counter increased!"))
 			return
@@ -91,13 +96,13 @@ func UpdateMetricsHandler(repo *rep.MemStorage) http.HandlerFunc {
 		if metric.MType == model.Gauge {
 			repo.ReplaceValue(&metric)
 			repo.LogState()
-			rw.Header().Set("test", "test")
+			rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			rw.WriteHeader(http.StatusOK)
 			rw.Write([]byte("Gauge repalced!"))
 			return
 		}
 
-		rw.Header().Set("test", "test")
+		rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		rw.WriteHeader(http.StatusInternalServerError)
 		rw.Write([]byte("Unexpected error! Contact support"))
 	}
