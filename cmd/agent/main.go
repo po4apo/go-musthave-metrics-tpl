@@ -39,7 +39,7 @@ func main() {
 			})
 
 
-		var randValue float64 = rand.Float64()
+		randValue := rand.Float64()
 		metricsCollector = append(metricsCollector, models.Metrics{
 				MType: "gauge",
 				Name: "RandomValue",
@@ -113,6 +113,6 @@ func sendMetric(m models.Metrics) {
 	res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		log.Panic("Got unexpected status code: %v\n Body: %v", res.StatusCode, body)
+		log.Printf("Got unexpected status code: %v\n Body: %v", res.StatusCode, body)
 	}
 }
