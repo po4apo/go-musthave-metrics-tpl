@@ -14,17 +14,17 @@ import (
 
 var (
 	ErrBadRequest = errors.New("badrequest")
-	ErrNotFound = errors.New("badrequest")
+	ErrNotFound = errors.New("notfound")
 )
 
 func validateUpdateMetrics(url *url.URL, result *model.Metrics) (error) {
-	COUNT_PARAMS := 4
+	const countParams = 4
 
 	values := strings.Split(strings.Trim(url.Path, "/"), "/")
 	log.Printf("Данные запроса: %v, len: %d", values, len(values))
 
-	if len(values) != COUNT_PARAMS {
-		if len(values) > 2 {
+	if len(values) != countParams {
+		if len(values) >= 2 {
 			return ErrNotFound
 		}
 		return ErrBadRequest
@@ -66,6 +66,7 @@ func UpdateMetricsHandler(repo *rep.MemStorage) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		var metric model.Metrics
 		if err := validateUpdateMetrics(r.URL, &metric); err != nil {
+			log.Printf("%v",  err)
 			if errors.Is(err, ErrNotFound){
 				rw.WriteHeader(http.StatusNotFound)
 				rw.Write([]byte(err.Error()))
