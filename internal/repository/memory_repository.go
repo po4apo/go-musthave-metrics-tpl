@@ -11,7 +11,7 @@ import (
 
 var (
 	ErrUnsupportedType = errors.New("the metric type unsupport this action")
-	ErrValueUndefine   = errors.New("required field is not define")
+	ErrFieldUndefine   = errors.New("required field is not define")
 )
 
 type MemStorage struct {
@@ -35,6 +35,10 @@ func (s *MemStorage) IncreaseValue(metric *model.Metrics) error {
 		s.metrics[metric.Name] = *metric
 		return nil
 	}
+
+	if metric.Delta == nil {
+			return fmt.Errorf("fiels \"Delta\" is not define: %w", ErrFieldUndefine)
+		}
 
 	if v.Delta == nil {
 		newDelta := *metric.Delta
@@ -62,6 +66,11 @@ func (s *MemStorage) ReplaceValue(metric *model.Metrics) error {
 		s.metrics[metric.Name] = *metric
 		return nil
 	}
+
+	if metric.Value == nil {
+			return fmt.Errorf("fiels \"Value\" is not define: %w", ErrFieldUndefine)
+		}
+
 	newValue := *metric.Value
 	v.Value = &newValue
 	log.Printf("%v успешно заменена на %v", v.Name, *v.Value)
