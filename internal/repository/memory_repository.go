@@ -65,6 +65,8 @@ func (s *MemStorage) ReplaceValue(metric *model.Metrics) error {
 	newValue := *metric.Value
 	v.Value = &newValue
 	log.Printf("%v успешно заменена на %v", v.Name, *v.Value)
+
+	s.metrics[metric.Name] = v
 	return nil
 }
 
