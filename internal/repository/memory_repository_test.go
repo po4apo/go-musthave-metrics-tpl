@@ -6,31 +6,32 @@ import (
 	model "github.com/po4apo/go-musthave-metrics-tpl/internal/model"
 	"github.com/stretchr/testify/assert"
 )
+
 func i64(v int64) *int64 { return &v }
 
 func f64(v float64) *float64 { return &v }
 
 func getCounterMetric(name string, delta *int64) model.Metrics {
 	return model.Metrics{
-					Name: name,
-					MType: model.Counter,
-					Delta: delta,
-				}		
+		Name:  name,
+		MType: model.Counter,
+		Delta: delta,
+	}
 }
 
 func getGaugeMetric(name string, value *float64) model.Metrics {
 	return model.Metrics{
-					Name: name,
-					MType: model.Gauge,
-					Value: value,
-				}		
+		Name:  name,
+		MType: model.Gauge,
+		Value: value,
+	}
 }
 
 func TestIncreaseValue(t *testing.T) {
-	tests := []struct{
-		name string
+	tests := []struct {
+		name    string
 		metrics []model.Metrics
-		want map[string]model.Metrics
+		want    map[string]model.Metrics
 	}{
 		{
 			name: "Добавление одной метрики",
@@ -59,7 +60,7 @@ func TestIncreaseValue(t *testing.T) {
 				getCounterMetric("test1", i64(2)),
 			},
 			want: map[string]model.Metrics{
-				"test1": getCounterMetric("test1", i64(3)),				
+				"test1": getCounterMetric("test1", i64(3)),
 			},
 		},
 		{
@@ -69,16 +70,16 @@ func TestIncreaseValue(t *testing.T) {
 				getCounterMetric("test1", i64(2)),
 			},
 			want: map[string]model.Metrics{
-				"test1": getCounterMetric("test1", i64(2)),				
+				"test1": getCounterMetric("test1", i64(2)),
 			},
 		},
 	}
-	for _, tt := range tests{
+	for _, tt := range tests {
 		t.Run(
 			tt.name,
 			func(t *testing.T) {
 				ms, _ := NewMemStorage()
-				for _, metric := range tt.metrics{
+				for _, metric := range tt.metrics {
 					err := ms.IncreaseValue(&metric)
 					assert.NoError(t, err)
 				}
@@ -86,28 +87,27 @@ func TestIncreaseValue(t *testing.T) {
 			},
 		)
 	}
-	
 
 }
 
 func TestErrFieldUndefineIncreaseValue(t *testing.T) {
-	tests := []struct{
-		name string
-		initValue *int64
+	tests := []struct {
+		name           string
+		initValue      *int64
 		secondaryValue *int64
-	}{		
+	}{
 		{
-			name: "Добавление nil к nil",
-			initValue: nil,
+			name:           "Добавление nil к nil",
+			initValue:      nil,
 			secondaryValue: nil,
 		},
 		{
-			name: "Добавление nil к числу",
-			initValue: i64(1),
+			name:           "Добавление nil к числу",
+			initValue:      i64(1),
 			secondaryValue: nil,
 		},
 	}
-	for _, tt := range tests{
+	for _, tt := range tests {
 		t.Run(
 			tt.name,
 			func(t *testing.T) {
@@ -126,12 +126,11 @@ func TestErrFieldUndefineIncreaseValue(t *testing.T) {
 	}
 }
 
-
 func TestReplaceValue(t *testing.T) {
-	tests := []struct{
-		name string
+	tests := []struct {
+		name    string
 		metrics []model.Metrics
-		want map[string]model.Metrics
+		want    map[string]model.Metrics
 	}{
 		{
 			name: "Добавление одной метрики",
@@ -160,7 +159,7 @@ func TestReplaceValue(t *testing.T) {
 				getGaugeMetric("test1", f64(2)),
 			},
 			want: map[string]model.Metrics{
-				"test1": getGaugeMetric("test1", f64(2)),				
+				"test1": getGaugeMetric("test1", f64(2)),
 			},
 		},
 		{
@@ -170,16 +169,16 @@ func TestReplaceValue(t *testing.T) {
 				getGaugeMetric("test1", f64(2)),
 			},
 			want: map[string]model.Metrics{
-				"test1": getGaugeMetric("test1", f64(2)),				
+				"test1": getGaugeMetric("test1", f64(2)),
 			},
 		},
 	}
-	for _, tt := range tests{
+	for _, tt := range tests {
 		t.Run(
 			tt.name,
 			func(t *testing.T) {
 				ms, _ := NewMemStorage()
-				for _, metric := range tt.metrics{
+				for _, metric := range tt.metrics {
 					err := ms.ReplaceValue(&metric)
 					assert.NoError(t, err)
 				}
@@ -190,23 +189,23 @@ func TestReplaceValue(t *testing.T) {
 }
 
 func TestErrFieldUndefineReplaceValue(t *testing.T) {
-	tests := []struct{
-		name string
-		initValue *float64
+	tests := []struct {
+		name           string
+		initValue      *float64
 		secondaryValue *float64
-	}{		
+	}{
 		{
-			name: "Добавление nil к nil",
-			initValue: nil,
+			name:           "Добавление nil к nil",
+			initValue:      nil,
 			secondaryValue: nil,
 		},
 		{
-			name: "Добавление nil к числу",
-			initValue: f64(1),
+			name:           "Добавление nil к числу",
+			initValue:      f64(1),
 			secondaryValue: nil,
 		},
 	}
-	for _, tt := range tests{
+	for _, tt := range tests {
 		t.Run(
 			tt.name,
 			func(t *testing.T) {
@@ -223,11 +222,10 @@ func TestErrFieldUndefineReplaceValue(t *testing.T) {
 			},
 		)
 	}
-	
 
 }
 
-func TestErrUnsupportedTypeReplaceValue(t *testing.T) {	
+func TestErrUnsupportedTypeReplaceValue(t *testing.T) {
 	t.Run(
 		"ReplaceValue для MType = Counter",
 		func(t *testing.T) {
@@ -241,7 +239,7 @@ func TestErrUnsupportedTypeReplaceValue(t *testing.T) {
 	)
 }
 
-func TestErrUnsupportedTypeIncreaseValue(t *testing.T) {	
+func TestErrUnsupportedTypeIncreaseValue(t *testing.T) {
 	t.Run(
 		"IncreaseValue для MType = Gauge",
 		func(t *testing.T) {

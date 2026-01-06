@@ -14,10 +14,10 @@ import (
 
 var (
 	ErrBadRequest = errors.New("badrequest")
-	ErrNotFound = errors.New("notfound")
+	ErrNotFound   = errors.New("notfound")
 )
 
-func validateUpdateMetrics(url *url.URL, result *model.Metrics) (error) {
+func validateUpdateMetrics(url *url.URL, result *model.Metrics) error {
 	const countParams = 4
 
 	values := strings.Split(strings.Trim(url.Path, "/"), "/")
@@ -30,12 +30,12 @@ func validateUpdateMetrics(url *url.URL, result *model.Metrics) (error) {
 		return ErrBadRequest
 	}
 	op := values[0]
-	
+
 	if values[1] != model.Counter && values[1] != model.Gauge {
 		return ErrBadRequest
 	}
 
-	result.MType = values[1]	
+	result.MType = values[1]
 	result.Name = values[2]
 
 	if result.MType == model.Counter {
@@ -71,19 +71,19 @@ func UpdateMetricsHandler(repo *rep.MemStorage) http.HandlerFunc {
 		// }
 
 		if err := validateUpdateMetrics(r.URL, &metric); err != nil {
-			log.Printf("%v",  err)
-			if errors.Is(err, ErrNotFound){
+			log.Printf("%v", err)
+			if errors.Is(err, ErrNotFound) {
 				rw.WriteHeader(http.StatusNotFound)
 				rw.Write([]byte(err.Error()))
 				return
 			}
-			if errors.Is(err, ErrBadRequest){
+			if errors.Is(err, ErrBadRequest) {
 				rw.WriteHeader(http.StatusBadRequest)
 				rw.Write([]byte(err.Error()))
-				return	
-			}			
+				return
+			}
 		}
-		
+
 		if metric.MType == model.Counter {
 			repo.IncreaseValue(&metric)
 			repo.LogState()

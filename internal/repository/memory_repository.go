@@ -37,8 +37,8 @@ func (s *MemStorage) IncreaseValue(metric *model.Metrics) error {
 	}
 
 	if metric.Delta == nil {
-			return fmt.Errorf("fiels \"Delta\" is not define: %w", ErrFieldUndefine)
-		}
+		return fmt.Errorf("fiels \"Delta\" is not define: %w", ErrFieldUndefine)
+	}
 
 	if v.Delta == nil {
 		newDelta := *metric.Delta
@@ -68,8 +68,8 @@ func (s *MemStorage) ReplaceValue(metric *model.Metrics) error {
 	}
 
 	if metric.Value == nil {
-			return fmt.Errorf("fiels \"Value\" is not define: %w", ErrFieldUndefine)
-		}
+		return fmt.Errorf("fiels \"Value\" is not define: %w", ErrFieldUndefine)
+	}
 
 	newValue := *metric.Value
 	v.Value = &newValue
@@ -84,6 +84,6 @@ func (s *MemStorage) GetAll() (map[string]model.Metrics, error) {
 }
 
 func (s *MemStorage) LogState() {
-    b, _ := json.MarshalIndent(s.metrics, "", "  ")
-    log.Printf("Итоговое состояние хранилища:\n%s", string(b))
+	b, _ := json.MarshalIndent(s.metrics, "", "  ")
+	log.Printf("Итоговое состояние хранилища:\n%s", string(b))
 }
