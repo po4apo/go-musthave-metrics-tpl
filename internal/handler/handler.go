@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -32,7 +33,7 @@ func validateUpdateMetrics(url *url.URL, result *model.Metrics) error {
 	op := values[0]
 
 	if values[1] != model.Counter && values[1] != model.Gauge {
-		return ErrBadRequest
+		return fmt.Errorf("\"%v\" is unknown metric type: %w", values[1], ErrBadRequest)
 	}
 
 	result.MType = values[1]
@@ -42,13 +43,13 @@ func validateUpdateMetrics(url *url.URL, result *model.Metrics) error {
 		if delta, err := strconv.ParseInt(values[3], 10, 64); err == nil {
 			result.Delta = &delta
 		} else {
-			return ErrBadRequest
+			return fmt.Errorf("%w: %w", err, ErrBadRequest)
 		}
 	} else {
 		if value, err := strconv.ParseFloat(values[3], 64); err == nil {
 			result.Value = &value
 		} else {
-			return ErrBadRequest
+			return fmt.Errorf("%w: %w", err, ErrBadRequest)
 		}
 	}
 
@@ -65,10 +66,11 @@ func validateUpdateMetrics(url *url.URL, result *model.Metrics) error {
 func UpdateMetricsHandler(repo *rep.MemStorage) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		var metric model.Metrics
-		// if r.Method != http.MethodPost {
-		// 	rw.WriteHeader(http.StatusMethodNotAllowed)
-		// 	return
-		// }
+		if r.Method != http.MethodPost {
+			rw.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
 
 		if err := validateUpdateMetrics(r.URL, &metric); err != nil {
 			log.Printf("%v", err)
@@ -87,7 +89,6 @@ func UpdateMetricsHandler(repo *rep.MemStorage) http.HandlerFunc {
 		if metric.MType == model.Counter {
 			repo.IncreaseValue(&metric)
 			repo.LogState()
-			rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			rw.WriteHeader(http.StatusOK)
 			rw.Write([]byte("Counter increased!"))
 			return
@@ -96,13 +97,12 @@ func UpdateMetricsHandler(repo *rep.MemStorage) http.HandlerFunc {
 		if metric.MType == model.Gauge {
 			repo.ReplaceValue(&metric)
 			repo.LogState()
-			rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			rw.WriteHeader(http.StatusOK)
 			rw.Write([]byte("Gauge repalced!"))
 			return
 		}
 
-		rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		
 		rw.WriteHeader(http.StatusInternalServerError)
 		rw.Write([]byte("Unexpected error! Contact support"))
 	}
