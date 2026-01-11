@@ -3,7 +3,7 @@ package repository
 import (
 	"testing"
 
-	model "github.com/po4apo/go-musthave-metrics-tpl/internal/model"
+	"github.com/po4apo/go-musthave-metrics-tpl/internal/model"
 	"github.com/stretchr/testify/assert"
 )
 

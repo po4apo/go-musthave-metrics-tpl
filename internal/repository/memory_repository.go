@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log"
 
-	model "github.com/po4apo/go-musthave-metrics-tpl/internal/model"
+	"github.com/po4apo/go-musthave-metrics-tpl/internal/model"
 )
 
 var (

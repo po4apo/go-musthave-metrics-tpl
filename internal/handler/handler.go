@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	model "github.com/po4apo/go-musthave-metrics-tpl/internal/model"
+	"github.com/po4apo/go-musthave-metrics-tpl/internal/model"
 	rep "github.com/po4apo/go-musthave-metrics-tpl/internal/repository"
 )
 
