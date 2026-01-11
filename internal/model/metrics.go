@@ -1,5 +1,7 @@
 package models
 
+import "strings"
+
 const (
 	Counter = "counter"
 	Gauge   = "gauge"
@@ -18,3 +20,34 @@ type Metrics struct {
 	Hash  string   `json:"hash,omitempty"`
 	Name  string   `json:"name"`
 }
+
+func GenerateID(mType string, name string) string {
+	var builder strings.Builder
+	builder.WriteString(mType)
+	builder.WriteByte('_')
+	builder.WriteString(name)
+
+	return builder.String()
+}
+
+func NewCounterMetrics(name string, delta *int64) Metrics {
+	mType := Counter
+	return Metrics{
+		ID:    GenerateID(mType, name),
+		Name:  name,
+		MType: mType,
+		Delta: delta,
+	}
+}
+
+func NewGaugeMetric(name string, value *float64) Metrics {
+	mType := Gauge
+	return Metrics{
+		ID:    GenerateID(mType, name),
+		Name:  name,
+		MType: mType,
+		Value: value,
+	}
+}
+
+func Ptr[T any](v T) *T { return &v }

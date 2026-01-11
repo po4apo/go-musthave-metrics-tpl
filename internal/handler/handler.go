@@ -3,12 +3,13 @@ package handler
 import (
 	"errors"
 	"fmt"
+	"html"
 	"log"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
 	model "github.com/po4apo/go-musthave-metrics-tpl/internal/model"
 	rep "github.com/po4apo/go-musthave-metrics-tpl/internal/repository"
 )
@@ -18,45 +19,33 @@ var (
 	ErrNotFound   = errors.New("notfound")
 )
 
-func validateUpdateMetrics(url *url.URL, result *model.Metrics) error {
-	const countParams = 4
+func validateUpdateMetrics(
+	mType string,
+	name string,
+	value string,
+	result *model.Metrics) error {
 
-	values := strings.Split(strings.Trim(url.Path, "/"), "/")
-	log.Printf("Данные запроса: %v, len: %d", values, len(values))
-
-	if len(values) != countParams {
-		if len(values) >= 2 {
-			return ErrNotFound
-		}
-		return ErrBadRequest
-	}
-	op := values[0]
-
-	if values[1] != model.Counter && values[1] != model.Gauge {
-		return fmt.Errorf("\"%v\" is unknown metric type: %w", values[1], ErrBadRequest)
-	}
-
-	result.MType = values[1]
-	result.Name = values[2]
-
-	if result.MType == model.Counter {
-		if delta, err := strconv.ParseInt(values[3], 10, 64); err == nil {
-			result.Delta = &delta
-		} else {
-			return fmt.Errorf("%w: %w", err, ErrBadRequest)
-		}
-	} else {
-		if value, err := strconv.ParseFloat(values[3], 64); err == nil {
-			result.Value = &value
-		} else {
-			return fmt.Errorf("%w: %w", err, ErrBadRequest)
-		}
-	}
-
-	if result.Name == "" {
+	if name == "" {
 		return ErrNotFound
 	}
-	log.Printf("Итоговая модель: %v, Операция: %s", result, op)
+
+	switch mType {
+	case model.Counter:
+		if delta, err := strconv.ParseInt(value, 10, 64); err == nil {
+			*result = model.NewCounterMetrics(name, &delta)
+		} else {
+			return fmt.Errorf("%w: %w", err, ErrBadRequest)
+		}
+	case model.Gauge:
+		if value, err := strconv.ParseFloat(value, 64); err == nil {
+			*result = model.NewGaugeMetric(name, &value)
+		} else {
+			return fmt.Errorf("%w: %w", err, ErrBadRequest)
+		}
+	default:
+		return fmt.Errorf("\"%v\" is unknown metric type: %w", mType, ErrBadRequest)
+	}
+
 	return nil
 
 }
@@ -66,13 +55,14 @@ func validateUpdateMetrics(url *url.URL, result *model.Metrics) error {
 func UpdateMetricsHandler(repo *rep.MemStorage) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		var metric model.Metrics
-		if r.Method != http.MethodPost {
-			rw.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
+
+		mType := chi.URLParam(r, "type")
+		name := chi.URLParam(r, "name")
+		value := chi.URLParam(r, "value")
+
 		rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
 
-		if err := validateUpdateMetrics(r.URL, &metric); err != nil {
+		if err := validateUpdateMetrics(mType, name, value, &metric); err != nil {
 			log.Printf("%v", err)
 			if errors.Is(err, ErrNotFound) {
 				rw.WriteHeader(http.StatusNotFound)
@@ -102,8 +92,75 @@ func UpdateMetricsHandler(repo *rep.MemStorage) http.HandlerFunc {
 			return
 		}
 
-		
 		rw.WriteHeader(http.StatusInternalServerError)
 		rw.Write([]byte("Unexpected error! Contact support"))
+	}
+}
+
+func ViewMetrics(repo *rep.MemStorage) http.HandlerFunc {
+	return func(rw http.ResponseWriter, r *http.Request) {
+		metrics, err := repo.GetAll()
+		if err != nil {
+			rw.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		var builder strings.Builder
+
+		// Начало HTML документа
+		builder.WriteString("<!DOCTYPE html>\n<html><head><meta charset='utf-8'><title>Metrics</title></head><body>\n")
+		builder.WriteString("<h1>Metrics</h1>\n<table border='1' cellpadding='5' cellspacing='0'>\n")
+		builder.WriteString("<tr><th>Name</th><th>Type</th><th>Value</th></tr>\n")
+
+		// Вывод метрик
+		for _, metric := range metrics {
+			builder.WriteString("<tr><td>")
+			builder.WriteString(html.EscapeString(metric.Name))
+			builder.WriteString("</td><td>")
+			builder.WriteString(html.EscapeString(metric.MType))
+			builder.WriteString("</td><td>")
+
+			if metric.MType == model.Counter && metric.Delta != nil {
+				builder.WriteString(strconv.FormatInt(*metric.Delta, 10))
+			} else if metric.MType == model.Gauge && metric.Value != nil {
+				builder.WriteString(strconv.FormatFloat(*metric.Value, 'f', -1, 64))
+			} else {
+				builder.WriteString("N/A")
+			}
+
+			builder.WriteString("</td></tr>\n")
+		}
+
+		builder.WriteString("</table>\n</body></html>")
+
+		rw.Header().Set("Content-Type", "text/html; charset=utf-8")
+		rw.WriteHeader(http.StatusOK)
+		rw.Write([]byte(builder.String()))
+	}
+}
+
+func GetMetricHandler(repo *rep.MemStorage) http.HandlerFunc {
+	return func(rw http.ResponseWriter, r *http.Request) {
+		mType := chi.URLParam(r, "type")
+		name := chi.URLParam(r, "name")
+		id := model.GenerateID(mType, name)
+		rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
+
+		metric, err := repo.GetMetric(id)
+		log.Print(metric)
+		if errors.Is(err, rep.ErrNotFound) {
+			rw.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		var value string
+		if metric.MType == model.Counter {
+			value = strconv.FormatInt(*metric.Delta, 10)
+		} else {
+			value = strconv.FormatFloat(*metric.Value, 'f', -1, 64)
+		}
+		rw.WriteHeader(http.StatusOK)
+		rw.Write([]byte(value))
+
 	}
 }

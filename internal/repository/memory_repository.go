@@ -12,6 +12,7 @@ import (
 var (
 	ErrUnsupportedType = errors.New("the metric type unsupport this action")
 	ErrFieldUndefine   = errors.New("required field is not define")
+	ErrNotFound        = errors.New("notfound")
 )
 
 type MemStorage struct {
@@ -26,13 +27,19 @@ func NewMemStorage() (MemStorage, error) {
 	}, nil
 }
 
+func (s *MemStorage) SetStateFromSlice(repoState *[]model.Metrics) {
+	for _, m := range *repoState {
+		s.metrics[m.ID] = m
+	}
+}
+
 func (s *MemStorage) IncreaseValue(metric *model.Metrics) error {
 	if metric.MType != model.Counter {
 		return fmt.Errorf("failed increase %v by %v: %w", metric.Name, metric.Value, ErrUnsupportedType)
 	}
-	v, exists := s.metrics[metric.Name]
+	v, exists := s.metrics[metric.ID]
 	if !exists {
-		s.metrics[metric.Name] = *metric
+		s.metrics[metric.ID] = *metric
 		return nil
 	}
 
@@ -51,7 +58,7 @@ func (s *MemStorage) IncreaseValue(metric *model.Metrics) error {
 
 	log.Printf("%v успешно увеличена %v", v.Name, *v.Delta)
 
-	s.metrics[metric.Name] = v
+	s.metrics[metric.ID] = v
 
 	return nil
 }
@@ -61,9 +68,9 @@ func (s *MemStorage) ReplaceValue(metric *model.Metrics) error {
 		return fmt.Errorf("failed replace %v by %v: %w", metric.Name, metric.Value, ErrUnsupportedType)
 	}
 
-	v, exists := s.metrics[metric.Name]
+	v, exists := s.metrics[metric.ID]
 	if !exists {
-		s.metrics[metric.Name] = *metric
+		s.metrics[metric.ID] = *metric
 		return nil
 	}
 
@@ -75,12 +82,25 @@ func (s *MemStorage) ReplaceValue(metric *model.Metrics) error {
 	v.Value = &newValue
 	log.Printf("%v успешно заменена на %v", v.Name, *v.Value)
 
-	s.metrics[metric.Name] = v
+	s.metrics[metric.ID] = v
 	return nil
 }
 
-func (s *MemStorage) GetAll() (map[string]model.Metrics, error) {
-	return s.metrics, nil
+func (s *MemStorage) GetMetric(id string) (model.Metrics, error) {
+	log.Printf("%v", id)
+	metric, ok := s.metrics[id]
+	if !ok {
+		return model.Metrics{}, ErrNotFound
+	}
+	return metric, nil
+}
+
+func (s *MemStorage) GetAll() ([]model.Metrics, error) {
+	r := make([]model.Metrics, 0, len(s.metrics))
+	for _, v := range s.metrics {
+		r = append(r, v)
+	}
+	return r, nil
 }
 
 func (s *MemStorage) LogState() {

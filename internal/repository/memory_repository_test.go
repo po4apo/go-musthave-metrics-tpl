@@ -7,26 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func i64(v int64) *int64 { return &v }
-
-func f64(v float64) *float64 { return &v }
-
-func getCounterMetric(name string, delta *int64) model.Metrics {
-	return model.Metrics{
-		Name:  name,
-		MType: model.Counter,
-		Delta: delta,
-	}
-}
-
-func getGaugeMetric(name string, value *float64) model.Metrics {
-	return model.Metrics{
-		Name:  name,
-		MType: model.Gauge,
-		Value: value,
-	}
-}
-
 func TestIncreaseValue(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -36,41 +16,41 @@ func TestIncreaseValue(t *testing.T) {
 		{
 			name: "Добавление одной метрики",
 			metrics: []model.Metrics{
-				getCounterMetric("test1", i64(1)),
+				model.NewCounterMetrics("test1", model.Ptr(int64(1))),
 			},
 			want: map[string]model.Metrics{
-				"test1": getCounterMetric("test1", i64(1)),
+				"counter_test1": model.NewCounterMetrics("test1", model.Ptr(int64(1))),
 			},
 		},
 		{
 			name: "Добавление двух метрик",
 			metrics: []model.Metrics{
-				getCounterMetric("test1", i64(1)),
-				getCounterMetric("test2", i64(2)),
+				model.NewCounterMetrics("test1", model.Ptr(int64(1))),
+				model.NewCounterMetrics("test2", model.Ptr(int64(2))),
 			},
 			want: map[string]model.Metrics{
-				"test1": getCounterMetric("test1", i64(1)),
-				"test2": getCounterMetric("test2", i64(2)),
+				"counter_test1": model.NewCounterMetrics("test1", model.Ptr(int64(1))),
+				"counter_test2": model.NewCounterMetrics("test2", model.Ptr(int64(2))),
 			},
 		},
 		{
 			name: "Добавление и увеличение метрики",
 			metrics: []model.Metrics{
-				getCounterMetric("test1", i64(1)),
-				getCounterMetric("test1", i64(2)),
+				model.NewCounterMetrics("test1", model.Ptr(int64(1))),
+				model.NewCounterMetrics("test1", model.Ptr(int64(2))),
 			},
 			want: map[string]model.Metrics{
-				"test1": getCounterMetric("test1", i64(3)),
+				"counter_test1": model.NewCounterMetrics("test1", model.Ptr(int64(3))),
 			},
 		},
 		{
 			name: "Инициализация с nil и добовление",
 			metrics: []model.Metrics{
-				getCounterMetric("test1", nil),
-				getCounterMetric("test1", i64(2)),
+				model.NewCounterMetrics("test1", nil),
+				model.NewCounterMetrics("test1", model.Ptr(int64(2))),
 			},
 			want: map[string]model.Metrics{
-				"test1": getCounterMetric("test1", i64(2)),
+				"counter_test1": model.NewCounterMetrics("test1", model.Ptr(int64(2))),
 			},
 		},
 	}
@@ -103,7 +83,7 @@ func TestErrFieldUndefineIncreaseValue(t *testing.T) {
 		},
 		{
 			name:           "Добавление nil к числу",
-			initValue:      i64(1),
+			initValue:      model.Ptr(int64(1)),
 			secondaryValue: nil,
 		},
 	}
@@ -113,11 +93,11 @@ func TestErrFieldUndefineIncreaseValue(t *testing.T) {
 			func(t *testing.T) {
 				ms, _ := NewMemStorage()
 
-				m1 := getCounterMetric("test1", tt.initValue)
+				m1 := model.NewCounterMetrics("test1", tt.initValue)
 				err := ms.IncreaseValue(&m1)
 				assert.NoError(t, err)
 
-				m2 := getCounterMetric("test1", tt.secondaryValue)
+				m2 := model.NewCounterMetrics("test1", tt.secondaryValue)
 				err = ms.IncreaseValue(&m2)
 				assert.Error(t, err)
 				assert.ErrorAs(t, err, &ErrFieldUndefine)
@@ -135,41 +115,41 @@ func TestReplaceValue(t *testing.T) {
 		{
 			name: "Добавление одной метрики",
 			metrics: []model.Metrics{
-				getGaugeMetric("test1", f64(1)),
+				model.NewGaugeMetric("test1", model.Ptr(1.0)),
 			},
 			want: map[string]model.Metrics{
-				"test1": getGaugeMetric("test1", f64(1)),
+				"gauge_test1": model.NewGaugeMetric("test1", model.Ptr(1.0)),
 			},
 		},
 		{
 			name: "Добавление двух разных метрик",
 			metrics: []model.Metrics{
-				getGaugeMetric("test1", f64(1)),
-				getGaugeMetric("test2", f64(2)),
+				model.NewGaugeMetric("test1", model.Ptr(1.0)),
+				model.NewGaugeMetric("test2", model.Ptr(2.0)),
 			},
 			want: map[string]model.Metrics{
-				"test1": getGaugeMetric("test1", f64(1)),
-				"test2": getGaugeMetric("test2", f64(2)),
+				"gauge_test1": model.NewGaugeMetric("test1", model.Ptr(1.0)),
+				"gauge_test2": model.NewGaugeMetric("test2", model.Ptr(2.0)),
 			},
 		},
 		{
 			name: "Добавление и замена метрики",
 			metrics: []model.Metrics{
-				getGaugeMetric("test1", f64(1)),
-				getGaugeMetric("test1", f64(2)),
+				model.NewGaugeMetric("test1", model.Ptr(1.0)),
+				model.NewGaugeMetric("test1", model.Ptr(2.0)),
 			},
 			want: map[string]model.Metrics{
-				"test1": getGaugeMetric("test1", f64(2)),
+				"gauge_test1": model.NewGaugeMetric("test1", model.Ptr(2.0)),
 			},
 		},
 		{
 			name: "Инициализация с nil и добовление",
 			metrics: []model.Metrics{
-				getGaugeMetric("test1", nil),
-				getGaugeMetric("test1", f64(2)),
+				model.NewGaugeMetric("test1", nil),
+				model.NewGaugeMetric("test1", model.Ptr(2.0)),
 			},
 			want: map[string]model.Metrics{
-				"test1": getGaugeMetric("test1", f64(2)),
+				"gauge_test1": model.NewGaugeMetric("test1", model.Ptr(2.0)),
 			},
 		},
 	}
@@ -201,7 +181,7 @@ func TestErrFieldUndefineReplaceValue(t *testing.T) {
 		},
 		{
 			name:           "Добавление nil к числу",
-			initValue:      f64(1),
+			initValue:      model.Ptr(1.0),
 			secondaryValue: nil,
 		},
 	}
@@ -211,11 +191,11 @@ func TestErrFieldUndefineReplaceValue(t *testing.T) {
 			func(t *testing.T) {
 				ms, _ := NewMemStorage()
 
-				m1 := getGaugeMetric("test1", tt.initValue)
+				m1 := model.NewGaugeMetric("test1", tt.initValue)
 				err := ms.ReplaceValue(&m1)
 				assert.NoError(t, err)
 
-				m2 := getGaugeMetric("test1", tt.secondaryValue)
+				m2 := model.NewGaugeMetric("test1", tt.secondaryValue)
 				err = ms.ReplaceValue(&m2)
 				assert.Error(t, err)
 				assert.ErrorAs(t, err, &ErrFieldUndefine)
@@ -231,7 +211,7 @@ func TestErrUnsupportedTypeReplaceValue(t *testing.T) {
 		func(t *testing.T) {
 			ms, _ := NewMemStorage()
 
-			m1 := getCounterMetric("test1", i64(1))
+			m1 := model.NewCounterMetrics("test1", model.Ptr(int64(1)))
 			err := ms.ReplaceValue(&m1)
 			assert.Error(t, err)
 			assert.ErrorAs(t, err, &ErrUnsupportedType)
@@ -245,7 +225,7 @@ func TestErrUnsupportedTypeIncreaseValue(t *testing.T) {
 		func(t *testing.T) {
 			ms, _ := NewMemStorage()
 
-			m1 := getGaugeMetric("test1", f64(1))
+			m1 := model.NewGaugeMetric("test1", model.Ptr(1.0))
 			err := ms.IncreaseValue(&m1)
 			assert.Error(t, err)
 			assert.ErrorAs(t, err, &ErrUnsupportedType)
