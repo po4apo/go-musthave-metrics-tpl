@@ -109,10 +109,6 @@ func TestUpdateMetricsHandler(t *testing.T) {
 					"text/plain; charset=utf-8",
 					res.Header.Get("Content-Type"))
 				assert.Equal(t, tt.want.body, string(body))
-
-				t.Logf("Header: %v", res.Header)
-				t.Logf("Status: %v", res.StatusCode)
-				t.Logf("Body: %s", body)
 			},
 		)
 	}
@@ -142,6 +138,22 @@ func TestGetMetricHandler(t *testing.T) {
 			want: Want{
 				code: http.StatusOK,
 				body: "2.1",
+			},
+		},
+		{
+			name:    "Получение не существующий метрики gauge",
+			request: "/value/gauge/undefined_gauge",
+			want: Want{
+				code: http.StatusNotFound,
+				body: "",
+			},
+		},
+		{
+			name:    "Получение не существующий метрики counter",
+			request: "/value/counter/undefined_counter",
+			want: Want{
+				code: http.StatusNotFound,
+				body: "",
 			},
 		},
 	}
@@ -174,11 +186,46 @@ func TestGetMetricHandler(t *testing.T) {
 					"text/plain; charset=utf-8",
 					res.Header.Get("Content-Type"))
 				assert.Equal(t, tt.want.body, string(body))
-
-				t.Logf("Header: %v", res.Header)
-				t.Logf("Status: %v", res.StatusCode)
-				t.Logf("Body: %s", body)
 			},
 		)
 	}
+}
+
+func TestViewMetrics(t *testing.T) {
+
+	t.Run(
+		"Проверка отображения метрик",
+		func(t *testing.T) {
+			repoState := []model.Metrics{
+				model.NewGaugeMetric("test_gauge2", model.Ptr(2.1)),
+				model.NewGaugeMetric("test_gauge", model.Ptr(1.1)),
+				model.NewCounterMetrics("test_counter", model.Ptr(int64(1))),
+			}
+
+			repo, _ := repository.NewMemStorage()
+			repo.SetStateFromSlice(&repoState)
+
+			res := makeRequest(
+				"/",
+				http.MethodGet,
+				"/",
+				ViewMetrics(&repo),
+			)
+
+			body, err := io.ReadAll(res.Body)
+			res.Body.Close()
+			assert.NoError(t, err)
+
+			assert.Equal(t, http.StatusOK, res.StatusCode)
+			assert.Equal(t,
+				"text/html; charset=utf-8",
+				res.Header.Get("Content-Type"))
+
+			assert.Contains(t, string(body), `<tr><td>test_gauge</td><td>gauge</td><td>1.1</td></tr>`)
+			assert.Contains(t, string(body), `<tr><td>test_gauge2</td><td>gauge</td><td>2.1</td></tr>`)
+			assert.Contains(t, string(body), `<tr><td>test_counter</td><td>counter</td><td>1</td></tr>`)
+
+			t.Logf("Body: %s", body)
+		},
+	)
 }
