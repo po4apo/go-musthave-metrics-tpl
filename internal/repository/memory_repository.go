@@ -15,25 +15,25 @@ var (
 	ErrNotFound        = errors.New("notfound")
 )
 
-type MemStorage struct {
+type InMemoryMetricsRepository struct {
 	metrics map[string]model.Metrics // в качестве ключа ID
 }
 
-func NewMemStorage() (MemStorage, error) {
+func NewMemStorage() (InMemoryMetricsRepository, error) {
 	// размер не будем устанавливать через конфиг, так как это временное решение
 	// в дальнейшем будет полноценная БД
-	return MemStorage{
+	return InMemoryMetricsRepository{
 		metrics: make(map[string]model.Metrics, 128),
 	}, nil
 }
 
-func (s *MemStorage) SetStateFromSlice(repoState *[]model.Metrics) {
+func (s *InMemoryMetricsRepository) SetStateFromSlice(repoState *[]model.Metrics) {
 	for _, m := range *repoState {
 		s.metrics[m.ID] = m
 	}
 }
 
-func (s *MemStorage) IncreaseValue(metric *model.Metrics) error {
+func (s *InMemoryMetricsRepository) IncreaseValue(metric *model.Metrics) error {
 	if metric.MType != model.Counter {
 		return fmt.Errorf("failed increase %v by %v: %w", metric.Name, metric.Value, ErrUnsupportedType)
 	}
@@ -63,7 +63,7 @@ func (s *MemStorage) IncreaseValue(metric *model.Metrics) error {
 	return nil
 }
 
-func (s *MemStorage) ReplaceValue(metric *model.Metrics) error {
+func (s *InMemoryMetricsRepository) ReplaceValue(metric *model.Metrics) error {
 	if metric.MType != model.Gauge {
 		return fmt.Errorf("failed replace %v by %v: %w", metric.Name, metric.Value, ErrUnsupportedType)
 	}
@@ -86,7 +86,7 @@ func (s *MemStorage) ReplaceValue(metric *model.Metrics) error {
 	return nil
 }
 
-func (s *MemStorage) GetMetric(id string) (model.Metrics, error) {
+func (s *InMemoryMetricsRepository) GetMetric(id string) (model.Metrics, error) {
 	log.Printf("%v", id)
 	metric, ok := s.metrics[id]
 	if !ok {
@@ -95,7 +95,7 @@ func (s *MemStorage) GetMetric(id string) (model.Metrics, error) {
 	return metric, nil
 }
 
-func (s *MemStorage) GetAll() ([]model.Metrics, error) {
+func (s *InMemoryMetricsRepository) GetAll() ([]model.Metrics, error) {
 	r := make([]model.Metrics, 0, len(s.metrics))
 	for _, v := range s.metrics {
 		r = append(r, v)
@@ -103,7 +103,7 @@ func (s *MemStorage) GetAll() ([]model.Metrics, error) {
 	return r, nil
 }
 
-func (s *MemStorage) LogState() {
+func (s *InMemoryMetricsRepository) LogState() {
 	b, _ := json.MarshalIndent(s.metrics, "", "  ")
 	log.Printf("Итоговое состояние хранилища:\n%s", string(b))
 }

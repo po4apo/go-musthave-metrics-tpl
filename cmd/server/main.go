@@ -8,7 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/handler"
-	rep "github.com/po4apo/go-musthave-metrics-tpl/internal/repository"
+	"github.com/po4apo/go-musthave-metrics-tpl/internal/repository"
 )
 
 func main() {
@@ -20,7 +20,7 @@ func main() {
 func run(addr string) error {
 	log.Printf("Запуск сервера по адрессу: %v", addr)
 
-	repo, err := rep.NewMemStorage()
+	repo, err := repository.NewMemStorage()
 	if err != nil {
 		return fmt.Errorf("не удалось инициализировать хранилище: %w", err)
 	}

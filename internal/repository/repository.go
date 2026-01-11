@@ -1,10 +1,10 @@
 package repository
 
 import (
-	model "github.com/po4apo/go-musthave-metrics-tpl/internal/model"
+	"github.com/po4apo/go-musthave-metrics-tpl/internal/model"
 )
 
-type Repository interface {
+type MetricsRepository interface {
 	// вспомогательные
 	SetStateFromSlice(*[]model.Metrics)
 	LogState()
@@ -18,4 +18,4 @@ type Repository interface {
 	GetAll() ([]model.Metrics, error)
 }
 
-var _ Repository = (*MemStorage)(nil)
+var _ MetricsRepository = (*InMemoryMetricsRepository)(nil)

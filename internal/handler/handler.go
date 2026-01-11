@@ -11,7 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/model"
-	rep "github.com/po4apo/go-musthave-metrics-tpl/internal/repository"
+	"github.com/po4apo/go-musthave-metrics-tpl/internal/repository"
 )
 
 var (
@@ -52,7 +52,7 @@ func validateUpdateMetrics(
 
 // обрабатывает запросы типа
 // http://<АДРЕС_СЕРВЕРА>/update/<ТИП_МЕТРИКИ>/<ИМЯ_МЕТРИКИ>/<ЗНАЧЕНИЕ_МЕТРИКИ>
-func UpdateMetricsHandler(repo *rep.MemStorage) http.HandlerFunc {
+func UpdateMetricsHandler(repo repository.MetricsRepository) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		var metric model.Metrics
 
@@ -97,7 +97,7 @@ func UpdateMetricsHandler(repo *rep.MemStorage) http.HandlerFunc {
 	}
 }
 
-func ViewMetrics(repo *rep.MemStorage) http.HandlerFunc {
+func ViewMetrics(repo repository.MetricsRepository) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		metrics, err := repo.GetAll()
 		if err != nil {
@@ -139,7 +139,7 @@ func ViewMetrics(repo *rep.MemStorage) http.HandlerFunc {
 	}
 }
 
-func GetMetricHandler(repo *rep.MemStorage) http.HandlerFunc {
+func GetMetricHandler(repo repository.MetricsRepository) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		mType := chi.URLParam(r, "type")
 		name := chi.URLParam(r, "name")
@@ -148,7 +148,7 @@ func GetMetricHandler(repo *rep.MemStorage) http.HandlerFunc {
 
 		metric, err := repo.GetMetric(id)
 		log.Print(metric)
-		if errors.Is(err, rep.ErrNotFound) {
+		if errors.Is(err, repository.ErrNotFound) {
 			rw.WriteHeader(http.StatusNotFound)
 			return
 		}
