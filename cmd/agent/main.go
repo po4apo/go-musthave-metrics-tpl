@@ -9,8 +9,9 @@ import (
 )
 
 func main() {
-	const pollInterval = 2
-	const reportInterval = 10
+	startConf := parseFlags()
+	pollInterval := startConf.pollInterval
+	reportInterval := startConf.reportInterval
 
 	iterationCount := 0
 
@@ -46,7 +47,7 @@ func main() {
 
 		// добавление данных в репорт
 		metricsReport = append(metricsReport, metricsCollector)
-		time.Sleep(pollInterval * time.Second)
+		time.Sleep(time.Duration(pollInterval) * time.Second)
 
 		iterationCount++
 		iterationPerRequest := reportInterval / pollInterval
@@ -55,7 +56,7 @@ func main() {
 		if iterationCount >= iterationPerRequest {
 			for _, mc := range metricsReport {
 				for _, m := range mc {
-					agent.SendMetric(m)
+					agent.SendMetric(startConf.addr, m)
 				}
 			}
 			metricsReport = make([][]model.Metrics, 0)

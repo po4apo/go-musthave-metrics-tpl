@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -43,8 +44,8 @@ func GetMetrics() map[string]float64 {
 	}
 }
 
-func SendMetric(m model.Metrics) {
-	url := "http://localhost:8080/update"
+func SendMetric(serverAddr string, m model.Metrics) {
+	url := fmt.Sprintf("http://%s/update", serverAddr)
 	var metricValue string
 
 	if m.MType == model.Counter {
@@ -54,7 +55,12 @@ func SendMetric(m model.Metrics) {
 	}
 
 	request := url + "/" + m.MType + "/" + m.Name + "/" + metricValue
-	res, _ := http.Post(request, "application/json", nil)
+	res, err := http.Post(request, "application/json", nil)
+	if err != nil {
+		log.Printf("Failed to send metric %s: %v", m.Name, err)
+		return
+	}
+	defer res.Body.Close()
 
 	body, _ := io.ReadAll(res.Body)
 	res.Body.Close()
