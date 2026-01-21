@@ -7,9 +7,9 @@ import (
 )
 
 type startConf struct {
-	Addr string `env:"ADDRESS"`
-	ReportInterval int `env:"REPORT_INTERVAL"`
-	PollInterval int `env:"POLL_INTERVAL"`	
+	Addr           string `env:"ADDRESS"`
+	ReportInterval int    `env:"REPORT_INTERVAL"`
+	PollInterval   int    `env:"POLL_INTERVAL"`
 }
 
 func parseFlags() startConf {
@@ -21,9 +21,9 @@ func parseFlags() startConf {
 	flag.Parse()
 
 	conf = startConf{
-		Addr: *addr,
+		Addr:           *addr,
 		ReportInterval: *reportInterval,
-		PollInterval: *pollInterval,
+		PollInterval:   *pollInterval,
 	}
 
 	env.Parse(&conf)

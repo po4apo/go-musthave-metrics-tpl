@@ -7,7 +7,7 @@ import (
 )
 
 type startConig struct {
-	Addr string	`env:"ADDRESS"`
+	Addr string `env:"ADDRESS"`
 }
 
 func parseFlags() startConig {
