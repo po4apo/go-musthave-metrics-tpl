@@ -10,8 +10,8 @@ import (
 
 func main() {
 	startConf := parseFlags()
-	pollInterval := startConf.pollInterval
-	reportInterval := startConf.reportInterval
+	pollInterval := startConf.PollInterval
+	reportInterval := startConf.ReportInterval
 
 	iterationCount := 0
 
@@ -23,7 +23,7 @@ func main() {
 		for k, v := range agent.GetMetrics() {
 			value := v
 			metricsCollector = append(metricsCollector, model.Metrics{
-				MType: "gauge",
+				MType: model.Gauge,
 				Name:  k,
 				Value: &value,
 			})
@@ -40,7 +40,7 @@ func main() {
 		// добавление рандомной переменной
 		randValue := rand.Float64()
 		metricsCollector = append(metricsCollector, model.Metrics{
-			MType: "gauge",
+			MType: model.Gauge,
 			Name:  "RandomValue",
 			Value: &randValue,
 		})
@@ -56,7 +56,7 @@ func main() {
 		if iterationCount >= iterationPerRequest {
 			for _, mc := range metricsReport {
 				for _, m := range mc {
-					agent.SendMetric(startConf.addr, m)
+					agent.SendMetric(startConf.Addr, m)
 				}
 			}
 			metricsReport = make([][]model.Metrics, 0)

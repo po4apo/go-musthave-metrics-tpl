@@ -1,9 +1,13 @@
 package main
 
-import "flag"
+import (
+	"flag"
+
+	"github.com/caarlos0/env"
+)
 
 type startConig struct {
-	addr string	
+	Addr string	`env:"ADDRESS"`
 }
 
 func parseFlags() startConig {
@@ -11,7 +15,11 @@ func parseFlags() startConig {
 
 	flag.Parse()
 
-	return startConig{
-		addr: *addr,
+	conf := startConig{
+		Addr: *addr,
 	}
+
+	env.Parse(&conf)
+
+	return conf
 }

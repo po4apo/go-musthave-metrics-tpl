@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -14,7 +15,7 @@ import (
 func main() {
 	startConf := parseFlags()
 
-	if err := run(startConf.addr); err != nil {
+	if err := run(startConf.Addr); err != nil {
 		log.Fatalf("Ошибка при запуске сервера: %v", err)
 	}
 }
@@ -29,6 +30,7 @@ func run(addr string) error {
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
+	r.Use(middleware.Timeout(60 * time.Second))
 
 	r.Get("/", handler.ViewMetrics(&repo))
 	r.Post("/update/{type}/{name}/{value}", handler.UpdateMetricsHandler(&repo))

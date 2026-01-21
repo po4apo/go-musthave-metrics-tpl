@@ -1,8 +1,9 @@
 module github.com/po4apo/go-musthave-metrics-tpl
 
-go 1.22.0
+go 1.25
 
 require (
+	github.com/caarlos0/env v3.5.0+incompatible
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/stretchr/testify v1.11.1
 )
