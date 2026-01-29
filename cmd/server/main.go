@@ -22,11 +22,13 @@ func main() {
 }
 
 func run(addr string) error {
+	//TODO: заменить на slog
 	logger, err := zap.NewDevelopment()
 
 	if err != nil {
 		return fmt.Errorf("failed to inittialize logger: %w", err)
 	}
+	defer logger.Sync()
 
 	logger.Info("Server starting", zap.String("addr", addr))
 
