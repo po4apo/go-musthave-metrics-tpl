@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/model"
+	"go.uber.org/zap"
 )
 
 var (
@@ -17,13 +17,15 @@ var (
 
 type InMemoryMetricsRepository struct {
 	metrics map[string]model.Metrics // в качестве ключа ID
+	logger  *zap.Logger
 }
 
-func NewMemStorage() (InMemoryMetricsRepository, error) {
+func NewMemStorage(logger *zap.Logger) (InMemoryMetricsRepository, error) {
 	// размер не будем устанавливать через конфиг, так как это временное решение
 	// в дальнейшем будет полноценная БД
 	return InMemoryMetricsRepository{
 		metrics: make(map[string]model.Metrics, 128),
+		logger:  logger,
 	}, nil
 }
 
@@ -56,9 +58,13 @@ func (s *InMemoryMetricsRepository) IncreaseValue(metric *model.Metrics) error {
 		v.Delta = &newDelta
 	}
 
-	log.Printf("%v успешно увеличена %v", v.Name, *v.Delta)
-
 	s.metrics[metric.ID] = v
+	s.logger.Info(
+		"Value increaced",
+		zap.String("name", v.Name),
+		zap.Int64("delta", *v.Delta),
+	)
+	s.logger.Debug("State", zap.String("state", s.String()))
 
 	return nil
 }
@@ -80,18 +86,31 @@ func (s *InMemoryMetricsRepository) ReplaceValue(metric *model.Metrics) error {
 
 	newValue := *metric.Value
 	v.Value = &newValue
-	log.Printf("%v успешно заменена на %v", v.Name, *v.Value)
 
+	oldValue := *s.metrics[metric.ID].Value
 	s.metrics[metric.ID] = v
+
+	s.logger.Info(
+		"Value replaced",
+		zap.String("name", v.Name),
+		zap.Float64("oldValue", oldValue),
+		zap.Float64("newValue", *v.Value),
+	)
+	s.logger.Debug("State", zap.String("state", s.String()))
+
 	return nil
 }
 
 func (s *InMemoryMetricsRepository) GetMetric(id string) (model.Metrics, error) {
-	log.Printf("%v", id)
 	metric, ok := s.metrics[id]
 	if !ok {
 		return model.Metrics{}, ErrNotFound
 	}
+
+	s.logger.Info(
+		"Metric got",
+		zap.String("id", id),
+	)
 	return metric, nil
 }
 
@@ -103,7 +122,7 @@ func (s *InMemoryMetricsRepository) GetAll() ([]model.Metrics, error) {
 	return r, nil
 }
 
-func (s *InMemoryMetricsRepository) LogState() {
+func (s *InMemoryMetricsRepository) String() string {
 	b, _ := json.MarshalIndent(s.metrics, "", "  ")
-	log.Printf("Итоговое состояние хранилища:\n%s", string(b))
+	return string(b)
 }

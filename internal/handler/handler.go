@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/model"
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/repository"
+	"go.uber.org/zap"
 )
 
 var (
@@ -19,6 +20,17 @@ var (
 	ErrNotFound   = errors.New("notfound")
 )
 
+type Handler struct {
+	repo   *repository.MetricsRepository
+	logger *zap.Logger
+}
+
+func NewHandler(repo *repository.MetricsRepository, logger *zap.Logger) *Handler {
+	return &Handler{
+		repo:   repo,
+		logger: logger,
+	}
+}
 func validateUpdateMetrics(
 	mType string,
 	name string,
@@ -78,7 +90,6 @@ func UpdateMetricsHandler(repo repository.MetricsRepository) http.HandlerFunc {
 
 		if metric.MType == model.Counter {
 			repo.IncreaseValue(&metric)
-			repo.LogState()
 			rw.WriteHeader(http.StatusOK)
 			rw.Write([]byte("Counter increased!"))
 			return
@@ -86,7 +97,6 @@ func UpdateMetricsHandler(repo repository.MetricsRepository) http.HandlerFunc {
 
 		if metric.MType == model.Gauge {
 			repo.ReplaceValue(&metric)
-			repo.LogState()
 			rw.WriteHeader(http.StatusOK)
 			rw.Write([]byte("Gauge repalced!"))
 			return

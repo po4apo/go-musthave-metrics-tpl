@@ -7,7 +7,7 @@ import (
 type MetricsRepository interface {
 	// вспомогательные
 	SetStateFromSlice(*[]model.Metrics)
-	LogState()
+	String() string
 
 	// сеттеры
 	IncreaseValue(*model.Metrics) error
