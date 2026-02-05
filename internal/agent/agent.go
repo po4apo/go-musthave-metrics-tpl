@@ -1,12 +1,13 @@
 package agent
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"runtime"
-	"strconv"
 
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/model"
 )
@@ -46,16 +47,13 @@ func GetMetrics() map[string]float64 {
 
 func SendMetric(serverAddr string, m model.Metrics) {
 	url := fmt.Sprintf("http://%s/update", serverAddr)
-	var metricValue string
 
-	if m.MType == model.Counter {
-		metricValue = strconv.FormatInt(*m.Delta, 10)
-	} else {
-		metricValue = strconv.FormatFloat(*m.Value, 'f', -1, 64)
+	request_body, err := json.Marshal(m)
+	if err != nil {
+		panic(err)
 	}
 
-	request := url + "/" + m.MType + "/" + m.Name + "/" + metricValue
-	res, err := http.Post(request, "application/json", nil)
+	res, err := http.Post(url, "application/json", bytes.NewReader(request_body))
 	if err != nil {
 		log.Printf("Failed to send metric %s: %v", m.Name, err)
 		return

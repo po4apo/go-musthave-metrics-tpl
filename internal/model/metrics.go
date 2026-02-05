@@ -1,6 +1,10 @@
 package model
 
-import "strings"
+import (
+	"encoding/json"
+	"errors"
+	"strings"
+)
 
 const (
 	Counter = "counter"
@@ -13,12 +17,23 @@ const (
 // что бы отличать значение "0", от не заданного значения
 // и соответственно не кодировать в структуру.
 type Metrics struct {
-	ID    string   `json:"id"`
+	ID    string   `json:"-"`
 	MType string   `json:"type"`
 	Delta *int64   `json:"delta,omitempty"`
 	Value *float64 `json:"value,omitempty"`
 	Hash  string   `json:"hash,omitempty"`
 	Name  string   `json:"name"`
+}
+
+func (m *Metrics) UnmarshalJSON(data []byte) error {
+	type metrics Metrics
+	if err := json.Unmarshal(data, (*metrics)(m)); err != nil {
+		return err
+	}
+	if strings.TrimSpace(m.Name) == "" {
+		return errors.New("field \"name\" is required")
+	}
+	return nil
 }
 
 func GenerateID(mType string, name string) string {

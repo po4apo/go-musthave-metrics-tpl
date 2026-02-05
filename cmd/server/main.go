@@ -43,6 +43,7 @@ func run(addr string) error {
 
 	r.Get("/", handler.ViewMetrics(&repo))
 	r.Post("/update/{type}/{name}/{value}", handler.UpdateMetricsHandler(&repo))
+	r.Post("/update", handler.UpdateMetricsWithBodyHandler(&repo))
 	r.Get("/value/{type}/{name}", handler.GetMetricHandler(&repo))
 
 	if err = http.ListenAndServe(addr, r); err != nil {

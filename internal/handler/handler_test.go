@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"bytes"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +12,7 @@ import (
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/model"
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/repository"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
 )
 
 // makeRequest создает HTTP запрос через chi роутер для тестирования хендлера.
@@ -22,11 +25,18 @@ import (
 //
 // Возвращает:
 //   - *http.Response: результат выполнения запроса
-func makeRequest(pattern string, method string, target string, handler http.HandlerFunc) *http.Response {
+
+func newLogger() *zap.Logger {
+	logger, _ := zap.NewDevelopment()
+	return logger 
+
+}
+
+func makeRequest(pattern string, method string, target string, handler http.HandlerFunc, body io.Reader) *http.Response {
 	r := chi.NewRouter()
 	r.Method(method, pattern, handler)
 
-	request := httptest.NewRequest(method, target, nil)
+	request := httptest.NewRequest(method, target, body)
 	recorder := httptest.NewRecorder()
 
 	r.ServeHTTP(recorder, request)
@@ -92,12 +102,101 @@ func TestUpdateMetricsHandler(t *testing.T) {
 		t.Run(
 			tt.name,
 			func(t *testing.T) {
-				repo, _ := repository.NewMemStorage()
+				logger := newLogger()
+				repo, _ := repository.NewMemStorage(logger)
 				res := makeRequest(
 					"/update/{type}/{name}/{value}",
 					http.MethodPost,
 					tt.request,
 					UpdateMetricsHandler(&repo),
+					nil,
+				)
+
+				body, err := io.ReadAll(res.Body)
+				res.Body.Close()
+				assert.NoError(t, err)
+
+				assert.Equal(t, tt.want.code, res.StatusCode)
+				assert.Equal(t,
+					"text/plain; charset=utf-8",
+					res.Header.Get("Content-Type"))
+				assert.Equal(t, tt.want.body, string(body))
+			},
+		)
+	}
+}
+
+// тесты проверяющие тербования первого инкремента
+func TestUpdateMetricsWithBodyHandler(t *testing.T) {
+	const endpoint  = "/update"
+
+	type Want struct {
+		code int
+		body string
+	}
+
+	tests := []struct {
+		name    string
+		body model.Metrics
+		want    Want
+	}{{
+		name:    "Отправка counter",
+		body: model.NewCounterMetrics("test", model.Ptr(int64(1))),
+		want: Want{
+			code: http.StatusOK,
+			body: "Counter increased!",
+		},
+	},
+		{
+			name:    "Отправка gauge",
+			body: model.NewGaugeMetric("test", model.Ptr(float64(1))),
+			want: Want{
+				code: http.StatusOK,
+				body: "Gauge repalced!",
+			},
+		},
+		{
+			name:    "Отпрвка запроса без имени",
+			body: model.NewGaugeMetric("", model.Ptr(float64(1))),
+			want: Want{
+				code: http.StatusBadRequest,
+				body: "validation error: field \"name\" is required. badrequest",
+			},
+		},
+		{
+			name:    "Отправка с некоретным типом метрики",
+			body: model.Metrics{Name: "test", MType: "gauge_failed", Value: model.Ptr(float64(1.2))},
+			want: Want{
+				code: http.StatusBadRequest,
+				body: "\"gauge_failed\" is unknown metric type: badrequest",
+			},
+		},
+		{
+			name:    "Отправка counter с пустым Delta",
+			body: model.Metrics{Name: "test", MType: model.Counter, Value: model.Ptr(float64(1.2))},
+			want: Want{
+				code: http.StatusBadRequest,
+				body: "field \"delte\" is required for counter; badrequest",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(
+			tt.name,
+			func(t *testing.T) {
+				logger := newLogger()
+				repo, _ := repository.NewMemStorage(logger)
+
+				b_body, err := json.Marshal(tt.body)
+				assert.NoError(t, err)
+
+				res := makeRequest(
+					endpoint,
+					http.MethodPost,
+					endpoint,
+					UpdateMetricsWithBodyHandler(&repo),
+					bytes.NewReader(b_body),
 				)
 
 				body, err := io.ReadAll(res.Body)
@@ -166,8 +265,8 @@ func TestGetMetricHandler(t *testing.T) {
 					model.NewGaugeMetric("test_gauge", model.Ptr(2.1)),
 					model.NewCounterMetrics("test_counter", model.Ptr(int64(1))),
 				}
-
-				repo, _ := repository.NewMemStorage()
+				logger := newLogger()
+				repo, _ := repository.NewMemStorage(logger)
 				repo.SetStateFromSlice(&repoState)
 
 				res := makeRequest(
@@ -175,6 +274,7 @@ func TestGetMetricHandler(t *testing.T) {
 					http.MethodGet,
 					tt.request,
 					GetMetricHandler(&repo),
+					nil,
 				)
 
 				body, err := io.ReadAll(res.Body)
@@ -201,8 +301,8 @@ func TestViewMetrics(t *testing.T) {
 				model.NewGaugeMetric("test_gauge", model.Ptr(1.1)),
 				model.NewCounterMetrics("test_counter", model.Ptr(int64(1))),
 			}
-
-			repo, _ := repository.NewMemStorage()
+			logger := newLogger()
+			repo, _ := repository.NewMemStorage(logger)
 			repo.SetStateFromSlice(&repoState)
 
 			res := makeRequest(
@@ -210,6 +310,7 @@ func TestViewMetrics(t *testing.T) {
 				http.MethodGet,
 				"/",
 				ViewMetrics(&repo),
+				nil,
 			)
 
 			body, err := io.ReadAll(res.Body)
