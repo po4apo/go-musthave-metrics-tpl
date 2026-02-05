@@ -28,7 +28,7 @@ import (
 
 func newLogger() *zap.Logger {
 	logger, _ := zap.NewDevelopment()
-	return logger 
+	return logger
 
 }
 
@@ -128,7 +128,7 @@ func TestUpdateMetricsHandler(t *testing.T) {
 
 // тесты проверяющие тербования первого инкремента
 func TestUpdateMetricsWithBodyHandler(t *testing.T) {
-	const endpoint  = "/update"
+	const endpoint = "/update"
 
 	type Want struct {
 		code int
@@ -136,11 +136,11 @@ func TestUpdateMetricsWithBodyHandler(t *testing.T) {
 	}
 
 	tests := []struct {
-		name    string
+		name string
 		body model.Metrics
-		want    Want
+		want Want
 	}{{
-		name:    "Отправка counter",
+		name: "Отправка counter",
 		body: model.NewCounterMetrics("test", model.Ptr(int64(1))),
 		want: Want{
 			code: http.StatusOK,
@@ -148,7 +148,7 @@ func TestUpdateMetricsWithBodyHandler(t *testing.T) {
 		},
 	},
 		{
-			name:    "Отправка gauge",
+			name: "Отправка gauge",
 			body: model.NewGaugeMetric("test", model.Ptr(float64(1))),
 			want: Want{
 				code: http.StatusOK,
@@ -156,7 +156,7 @@ func TestUpdateMetricsWithBodyHandler(t *testing.T) {
 			},
 		},
 		{
-			name:    "Отпрвка запроса без имени",
+			name: "Отпрвка запроса без имени",
 			body: model.NewGaugeMetric("", model.Ptr(float64(1))),
 			want: Want{
 				code: http.StatusBadRequest,
@@ -164,7 +164,7 @@ func TestUpdateMetricsWithBodyHandler(t *testing.T) {
 			},
 		},
 		{
-			name:    "Отправка с некоретным типом метрики",
+			name: "Отправка с некоретным типом метрики",
 			body: model.Metrics{Name: "test", MType: "gauge_failed", Value: model.Ptr(float64(1.2))},
 			want: Want{
 				code: http.StatusBadRequest,
@@ -172,7 +172,7 @@ func TestUpdateMetricsWithBodyHandler(t *testing.T) {
 			},
 		},
 		{
-			name:    "Отправка counter с пустым Delta",
+			name: "Отправка counter с пустым Delta",
 			body: model.Metrics{Name: "test", MType: model.Counter, Value: model.Ptr(float64(1.2))},
 			want: Want{
 				code: http.StatusBadRequest,
@@ -188,7 +188,7 @@ func TestUpdateMetricsWithBodyHandler(t *testing.T) {
 				logger := newLogger()
 				repo, _ := repository.NewMemStorage(logger)
 
-				b_body, err := json.Marshal(tt.body)
+				bBody, err := json.Marshal(tt.body)
 				assert.NoError(t, err)
 
 				res := makeRequest(
@@ -196,7 +196,7 @@ func TestUpdateMetricsWithBodyHandler(t *testing.T) {
 					http.MethodPost,
 					endpoint,
 					UpdateMetricsWithBodyHandler(&repo),
-					bytes.NewReader(b_body),
+					bytes.NewReader(bBody),
 				)
 
 				body, err := io.ReadAll(res.Body)

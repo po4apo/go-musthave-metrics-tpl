@@ -5,6 +5,7 @@ import (
 
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/model"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
 )
 
 func TestIncreaseValue(t *testing.T) {
@@ -58,7 +59,8 @@ func TestIncreaseValue(t *testing.T) {
 		t.Run(
 			tt.name,
 			func(t *testing.T) {
-				ms, _ := NewMemStorage()
+				logger, _ := zap.NewDevelopment()
+				ms, _ := NewMemStorage(logger)
 				for _, metric := range tt.metrics {
 					err := ms.IncreaseValue(&metric)
 					assert.NoError(t, err)
@@ -91,7 +93,8 @@ func TestErrFieldUndefineIncreaseValue(t *testing.T) {
 		t.Run(
 			tt.name,
 			func(t *testing.T) {
-				ms, _ := NewMemStorage()
+				logger, _ := zap.NewDevelopment()
+				ms, _ := NewMemStorage(logger)
 
 				m1 := model.NewCounterMetrics("test1", tt.initValue)
 				err := ms.IncreaseValue(&m1)
@@ -157,7 +160,8 @@ func TestReplaceValue(t *testing.T) {
 		t.Run(
 			tt.name,
 			func(t *testing.T) {
-				ms, _ := NewMemStorage()
+				logger, _ := zap.NewDevelopment()
+				ms, _ := NewMemStorage(logger)
 				for _, metric := range tt.metrics {
 					err := ms.ReplaceValue(&metric)
 					assert.NoError(t, err)
@@ -189,7 +193,8 @@ func TestErrFieldUndefineReplaceValue(t *testing.T) {
 		t.Run(
 			tt.name,
 			func(t *testing.T) {
-				ms, _ := NewMemStorage()
+				logger, _ := zap.NewDevelopment()
+				ms, _ := NewMemStorage(logger)
 
 				m1 := model.NewGaugeMetric("test1", tt.initValue)
 				err := ms.ReplaceValue(&m1)
@@ -209,7 +214,8 @@ func TestErrUnsupportedTypeReplaceValue(t *testing.T) {
 	t.Run(
 		"ReplaceValue для MType = Counter",
 		func(t *testing.T) {
-			ms, _ := NewMemStorage()
+			logger, _ := zap.NewDevelopment()
+			ms, _ := NewMemStorage(logger)
 
 			m1 := model.NewCounterMetrics("test1", model.Ptr(int64(1)))
 			err := ms.ReplaceValue(&m1)
@@ -223,7 +229,8 @@ func TestErrUnsupportedTypeIncreaseValue(t *testing.T) {
 	t.Run(
 		"IncreaseValue для MType = Gauge",
 		func(t *testing.T) {
-			ms, _ := NewMemStorage()
+			logger, _ := zap.NewDevelopment()
+			ms, _ := NewMemStorage(logger)
 
 			m1 := model.NewGaugeMetric("test1", model.Ptr(1.0))
 			err := ms.IncreaseValue(&m1)

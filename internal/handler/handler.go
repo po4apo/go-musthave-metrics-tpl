@@ -64,18 +64,18 @@ func validateUpdateMetrics(
 
 }
 
-func validateUpdateMetricsBody(raw_body	io.ReadCloser) (model.Metrics, error) {
+func validateUpdateMetricsBody(rawBody io.ReadCloser) (model.Metrics, error) {
 	var metrics model.Metrics
-	byte_body, err := io.ReadAll(raw_body)
+	byteBody, err := io.ReadAll(rawBody)
 	if err != nil {
 		return model.Metrics{}, fmt.Errorf("invalid JSON %w", ErrBadRequest)
 	}
-	
-	if err := json.Unmarshal(byte_body, &metrics); err != nil {
-		return model.Metrics{},fmt.Errorf("validation error: %w. %w", err, ErrBadRequest)
+
+	if err := json.Unmarshal(byteBody, &metrics); err != nil {
+		return model.Metrics{}, fmt.Errorf("validation error: %w. %w", err, ErrBadRequest)
 	}
 	metrics.ID = model.GenerateID(metrics.MType, metrics.Name)
-		
+
 	switch metrics.MType {
 	case model.Counter:
 		if metrics.Delta == nil {
@@ -84,7 +84,7 @@ func validateUpdateMetricsBody(raw_body	io.ReadCloser) (model.Metrics, error) {
 	case model.Gauge:
 		if metrics.Value == nil {
 			return model.Metrics{}, fmt.Errorf("field \"value\" is required for gauge; %w", ErrBadRequest)
-		}	
+		}
 	default:
 		return model.Metrics{}, fmt.Errorf("\"%v\" is unknown metric type: %w", metrics.MType, ErrBadRequest)
 	}
@@ -95,12 +95,12 @@ func validateUpdateMetricsBody(raw_body	io.ReadCloser) (model.Metrics, error) {
 
 func UpdateMetricsWithBodyHandler(repo repository.MetricsRepository) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
-		rw.Header().Set("Content-Type", "text/plain; charset=utf-8")		
+		rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		metrics, err := validateUpdateMetricsBody(r.Body)
 		if err != nil {
 			rw.WriteHeader(http.StatusBadRequest)
 			rw.Write([]byte(err.Error()))
-			return 
+			return
 		}
 
 		if metrics.MType == model.Counter {
@@ -121,6 +121,7 @@ func UpdateMetricsWithBodyHandler(repo repository.MetricsRepository) http.Handle
 		rw.Write([]byte("Unexpected error! Contact support"))
 	}
 }
+
 // обрабатывает запросы типа
 // http://<АДРЕС_СЕРВЕРА>/update/<ТИП_МЕТРИКИ>/<ИМЯ_МЕТРИКИ>/<ЗНАЧЕНИЕ_МЕТРИКИ>
 func UpdateMetricsHandler(repo repository.MetricsRepository) http.HandlerFunc {
