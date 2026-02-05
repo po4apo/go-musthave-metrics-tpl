@@ -8,7 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/handler"
-	internal_middleware "github.com/po4apo/go-musthave-metrics-tpl/internal/middleware"
+	internalMiddleware "github.com/po4apo/go-musthave-metrics-tpl/internal/middleware"
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/repository"
 	"go.uber.org/zap"
 )
@@ -38,7 +38,7 @@ func run(addr string) error {
 	}
 
 	r := chi.NewRouter()
-	r.Use(internal_middleware.CustomLogger(logger))
+	r.Use(internalMiddleware.CustomLogger(logger))
 	r.Use(middleware.Timeout(30 * time.Second))
 
 	r.Get("/", handler.ViewMetrics(&repo))

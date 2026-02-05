@@ -86,14 +86,12 @@ func (s *InMemoryMetricsRepository) ReplaceValue(metric *model.Metrics) error {
 
 	newValue := *metric.Value
 	v.Value = &newValue
-
-	oldValue := *s.metrics[metric.ID].Value
+	
 	s.metrics[metric.ID] = v
 
 	s.logger.Info(
 		"Value replaced",
 		zap.String("name", v.Name),
-		zap.Float64("oldValue", oldValue),
 		zap.Float64("newValue", *v.Value),
 	)
 	s.logger.Debug("State", zap.String("state", s.String()))
