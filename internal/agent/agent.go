@@ -48,12 +48,12 @@ func GetMetrics() map[string]float64 {
 func SendMetric(serverAddr string, m model.Metrics) {
 	url := fmt.Sprintf("http://%s/update", serverAddr)
 
-	request_body, err := json.Marshal(m)
+	requestBody, err := json.Marshal(m)
 	if err != nil {
 		panic(err)
 	}
 
-	res, err := http.Post(url, "application/json", bytes.NewReader(request_body))
+	res, err := http.Post(url, "application/json", bytes.NewReader(requestBody))
 	if err != nil {
 		log.Printf("Failed to send metric %s: %v", m.Name, err)
 		return
