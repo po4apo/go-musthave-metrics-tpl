@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"io"
 	"net/http"
 	"time"
 
@@ -41,20 +40,11 @@ func CustomLogger(logger *zap.Logger) func(http.Handler) http.Handler {
 			start := time.Now()
 			uri := r.RequestURI
 			method := r.Method
-			body, err := io.ReadAll(r.Body)
-			if err != nil {
-				logger.Info("reading request body failed",
-					zap.String("method", method),
-					zap.String("uri", uri))
-			}
-
-			defer r.Body.Close()
 
 			logger.Info(
 				"Got request",
 				zap.String("method", method),
 				zap.String("uri", uri),
-				zap.String("body", string(body)),
 			)
 
 			next.ServeHTTP(&lwr, r)
