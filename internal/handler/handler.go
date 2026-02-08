@@ -79,7 +79,7 @@ func validateUpdateMetricsBody(rawBody io.ReadCloser) (model.Metrics, error) {
 	switch metrics.MType {
 	case model.Counter:
 		if metrics.Delta == nil {
-			return model.Metrics{}, fmt.Errorf("field \"delte\" is required for counter; %w", ErrBadRequest)
+			return model.Metrics{}, fmt.Errorf("field \"delta\" is required for counter; %w", ErrBadRequest)
 		}
 	case model.Gauge:
 		if metrics.Value == nil {

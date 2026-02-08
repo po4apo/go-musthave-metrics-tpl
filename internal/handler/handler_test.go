@@ -176,7 +176,7 @@ func TestUpdateMetricsWithBodyHandler(t *testing.T) {
 			body: model.Metrics{Name: "test", MType: model.Counter, Value: model.Ptr(float64(1.2))},
 			want: Want{
 				code: http.StatusBadRequest,
-				body: "field \"delte\" is required for counter; badrequest",
+				body: "field \"delta\" is required for counter; badrequest",
 			},
 		},
 	}
