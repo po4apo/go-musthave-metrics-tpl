@@ -1,7 +1,10 @@
 package middleware
 
 import (
+	"compress/gzip"
+	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -57,6 +60,53 @@ func CustomLogger(logger *zap.Logger) func(http.Handler) http.Handler {
 				zap.Int("size", lwr.rd.size),
 				zap.String("duration", delta),
 			)
+
+		})
+	}
+}
+
+type GZipWriter struct {
+	http.ResponseWriter
+	Writer         io.Writer
+	shouldCompress bool
+}
+
+func (w *GZipWriter) WriteHeader(statusCode int) {
+	const supportContentType = "text/html"
+	ct := w.Header().Get("Content-Type")
+	if strings.Contains(ct, supportContentType) {
+		w.shouldCompress = true
+		w.ResponseWriter.Header().Set("Content-Encoding", "gzip")
+	}
+
+	w.ResponseWriter.WriteHeader(statusCode)
+}
+func (w *GZipWriter) Write(p []byte) (int, error) {
+
+	if w.shouldCompress {
+		return w.Writer.Write(p)
+	}
+
+	return w.ResponseWriter.Write(p)
+
+}
+
+func CompressHtml() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			const supportAcceptEncoding = "gzip"
+			ow := w
+
+			isSupportedAcceptEncoding := strings.Contains(r.Header.Get("Accept-Encoding"), supportAcceptEncoding)
+
+			if isSupportedAcceptEncoding {
+				gw := gzip.NewWriter(w)
+				defer gw.Close()
+				ow = &GZipWriter{w, gw, false}
+
+			}
+
+			next.ServeHTTP(ow, r)
 
 		})
 	}

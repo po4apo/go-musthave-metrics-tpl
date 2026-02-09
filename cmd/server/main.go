@@ -39,6 +39,7 @@ func run(addr string) error {
 
 	r := chi.NewRouter()
 	r.Use(internalMiddleware.CustomLogger(logger))
+	r.Use(internalMiddleware.CompressHtml())
 	r.Use(middleware.Timeout(30 * time.Second))
 
 	r.Get("/", handler.ViewMetrics(&repo))
