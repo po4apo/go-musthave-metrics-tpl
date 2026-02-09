@@ -25,14 +25,35 @@ type Metrics struct {
 	Name  string   `json:"name"`
 }
 
+// rawMetrics для разбора JSON: клиент может передать "id" или "name" как имя метрики.
+// Внутренний ID всегда генерируется на сервере (GenerateID), не принимается от клиента.
+type rawMetrics struct {
+	MType string   `json:"type"`
+	Delta *int64   `json:"delta,omitempty"`
+	Value *float64 `json:"value,omitempty"`
+	Hash  string   `json:"hash,omitempty"`
+	Name  string   `json:"name"`
+	ID    string   `json:"id"`
+}
+
 func (m *Metrics) UnmarshalJSON(data []byte) error {
-	type metrics Metrics
-	if err := json.Unmarshal(data, (*metrics)(m)); err != nil {
+	var raw rawMetrics
+	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
-	if strings.TrimSpace(m.Name) == "" {
-		return errors.New("field \"name\" is required")
+	name := strings.TrimSpace(raw.Name)
+	if name == "" {
+		name = strings.TrimSpace(raw.ID)
 	}
+	if name == "" {
+		return errors.New("field \"name\" or \"id\" is required")
+	}
+	m.MType = raw.MType
+	m.Delta = raw.Delta
+	m.Value = raw.Value
+	m.Hash = raw.Hash
+	m.Name = name
+	m.ID = GenerateID(raw.MType, name)
 	return nil
 }
 

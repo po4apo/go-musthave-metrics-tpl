@@ -160,7 +160,7 @@ func TestUpdateMetricsWithBodyHandler(t *testing.T) {
 			body: model.NewGaugeMetric("", model.Ptr(float64(1))),
 			want: Want{
 				code: http.StatusBadRequest,
-				body: "validation error: field \"name\" is required. badrequest",
+				body: "validation error: field \"name\" or \"id\" is required. badrequest",
 			},
 		},
 		{
@@ -187,6 +187,65 @@ func TestUpdateMetricsWithBodyHandler(t *testing.T) {
 			func(t *testing.T) {
 				logger := newLogger()
 				repo, _ := repository.NewMemStorage(logger)
+
+				bBody, err := json.Marshal(tt.body)
+				assert.NoError(t, err)
+
+				res := makeRequest(
+					endpoint,
+					http.MethodPost,
+					endpoint,
+					UpdateMetricsWithBodyHandler(&repo),
+					bytes.NewReader(bBody),
+				)
+
+				body, err := io.ReadAll(res.Body)
+				res.Body.Close()
+				assert.NoError(t, err)
+
+				assert.Equal(t, tt.want.code, res.StatusCode)
+				assert.Equal(t,
+					"text/plain; charset=utf-8",
+					res.Header.Get("Content-Type"))
+				assert.Equal(t, tt.want.body, string(body))
+			},
+		)
+	}
+}
+
+func TestUpdateMetricsWithBodyHandlerChangeValue(t *testing.T) {
+	const endpoint = "/update"
+
+	type Want struct {
+		code int
+		body string
+	}
+
+	tests := []struct {
+		name string
+		body model.Metrics
+		want Want
+	}{{
+		name: "Изменить значение counter",
+		body: model.NewCounterMetrics("test_counter", model.Ptr(int64(1))),
+		want: Want{
+			code: http.StatusOK,
+			body: "Counter increased!",
+		},
+	},
+	}
+
+	for _, tt := range tests {
+		t.Run(
+			tt.name,
+			func(t *testing.T) {
+				repoState := []model.Metrics{
+					model.NewGaugeMetric("test_gauge", model.Ptr(2.1)),
+					model.NewCounterMetrics("test_counter", model.Ptr(int64(1))),
+				}
+				logger := newLogger()
+				repo, _ := repository.NewMemStorage(logger)
+				repo.SetStateFromSlice(&repoState)
 
 				bBody, err := json.Marshal(tt.body)
 				assert.NoError(t, err)
