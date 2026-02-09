@@ -46,6 +46,8 @@ func run(addr string) error {
 	r.Post("/update", handler.UpdateMetricsWithBodyHandler(&repo))
 	r.Post("/update/", handler.UpdateMetricsWithBodyHandler(&repo))
 	r.Get("/value/{type}/{name}", handler.GetMetricHandler(&repo))
+	r.Post("/value", handler.GetMetricWithBodyHandler(&repo))
+	r.Post("/value/", handler.GetMetricWithBodyHandler(&repo))
 
 	if err = http.ListenAndServe(addr, r); err != nil {
 		return fmt.Errorf("failed to start server: %w", err)

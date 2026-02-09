@@ -234,3 +234,65 @@ func GetMetricHandler(repo repository.MetricsRepository) http.HandlerFunc {
 
 	}
 }
+
+// metricValueResponse — формат ответа POST /value (id, type, value/delta по примеру API).
+type metricValueResponse struct {
+	ID    string   `json:"id"`
+	MType string   `json:"type"`
+	Delta *int64   `json:"delta,omitempty"`
+	Value *float64 `json:"value,omitempty"`
+}
+
+// valueRequest — тело запроса POST /value; id на входе воспринимается как имя метрики.
+type valueRequest struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+// GetMetricWithBodyHandler обрабатывает POST /value с JSON телом {"id":"...","type":"..."} или {"name":"...","type":"..."}.
+// На входе id воспринимается как name (имя метрики для поиска).
+func GetMetricWithBodyHandler(repo repository.MetricsRepository) http.HandlerFunc {
+	return func(rw http.ResponseWriter, r *http.Request) {
+		var req valueRequest
+		byteBody, err := io.ReadAll(r.Body)
+		if err != nil {
+			rw.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if err := json.Unmarshal(byteBody, &req); err != nil {
+			rw.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		// id на входе воспринимаем как name (имя метрики)
+		name := strings.TrimSpace(req.Name)
+		if name == "" {
+			name = strings.TrimSpace(req.ID)
+		}
+		if name == "" {
+			rw.WriteHeader(http.StatusNotFound)
+			return
+		}
+		id := model.GenerateID(req.Type, name)
+		metric, err := repo.GetMetric(id)
+		if errors.Is(err, repository.ErrNotFound) {
+			rw.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if err != nil {
+			rw.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		resp := metricValueResponse{
+			ID:    metric.Name,
+			MType: metric.MType,
+			Delta: metric.Delta,
+			Value: metric.Value,
+		}
+		rw.Header().Set("Content-Type", "application/json")
+		rw.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(rw).Encode(resp); err != nil {
+			return
+		}
+	}
+}
