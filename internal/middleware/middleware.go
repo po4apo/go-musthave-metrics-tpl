@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"compress/gzip"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -65,49 +64,68 @@ func CustomLogger(logger *zap.Logger) func(http.Handler) http.Handler {
 	}
 }
 
-type GZipWriter struct {
+// gzipResponseWriter оборачивает http.ResponseWriter и сжимает ответ gzip,
+// если Content-Type ответа поддерживается (text/html, application/json).
+type gzipResponseWriter struct {
 	http.ResponseWriter
-	Writer         io.Writer
-	shouldCompress bool
+	gzWriter *gzip.Writer
+	compressed bool
 }
 
-func (w *GZipWriter) WriteHeader(statusCode int) {
-	const supportContentType = "text/html"
-	ct := w.Header().Get("Content-Type")
-	if strings.Contains(ct, supportContentType) {
-		w.shouldCompress = true
-		w.ResponseWriter.Header().Set("Content-Encoding", "gzip")
-	}
+func isSupportedContentType(ct string) bool {
+	return strings.Contains(ct, "text/html") || strings.Contains(ct, "application/json")
+}
 
+func (w *gzipResponseWriter) WriteHeader(statusCode int) {
+	ct := w.Header().Get("Content-Type")
+	if isSupportedContentType(ct) {
+		w.compressed = true
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Del("Content-Length")
+	}
 	w.ResponseWriter.WriteHeader(statusCode)
 }
-func (w *GZipWriter) Write(p []byte) (int, error) {
 
-	if w.shouldCompress {
-		return w.Writer.Write(p)
+func (w *gzipResponseWriter) Write(p []byte) (int, error) {
+	if w.compressed {
+		return w.gzWriter.Write(p)
 	}
-
 	return w.ResponseWriter.Write(p)
-
 }
 
-func CompressHTML() func(http.Handler) http.Handler {
+// Close закрывает gzip writer только если сжатие действительно применялось.
+func (w *gzipResponseWriter) Close() error {
+	if w.compressed {
+		return w.gzWriter.Close()
+	}
+	return nil
+}
+
+// CompressGzip — middleware для gzip-сжатия ответов и декомпрессии входящих запросов.
+func CompressGzip() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			const supportAcceptEncoding = "gzip"
+			if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
+				gr, err := gzip.NewReader(r.Body)
+				if err == nil {
+					defer gr.Close()
+					r.Body = gr
+				}
+			}
+
+			// Сжатие ответа, если клиент поддерживает Accept-Encoding: gzip.
 			ow := w
-
-			isSupportedAcceptEncoding := strings.Contains(r.Header.Get("Accept-Encoding"), supportAcceptEncoding)
-
-			if isSupportedAcceptEncoding {
+			if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 				gw := gzip.NewWriter(w)
-				defer gw.Close()
-				ow = &GZipWriter{w, gw, false}
-
+				gzw := &gzipResponseWriter{
+					ResponseWriter: w,
+					gzWriter:       gw,
+				}
+				defer gzw.Close()
+				ow = gzw
 			}
 
 			next.ServeHTTP(ow, r)
-
 		})
 	}
 }
