@@ -46,7 +46,7 @@ func (s *InMemoryMetricsRepository) IncreaseValue(metric *model.Metrics) error {
 	}
 
 	if metric.Delta == nil {
-		return fmt.Errorf("fiels \"Delta\" is not define: %w", ErrFieldUndefine)
+		return fmt.Errorf("field \"Delta\" is not define: %w", ErrFieldUndefine)
 	}
 
 	if v.Delta == nil {
@@ -60,7 +60,7 @@ func (s *InMemoryMetricsRepository) IncreaseValue(metric *model.Metrics) error {
 
 	s.metrics[metric.ID] = v
 	s.logger.Info(
-		"Value increaced",
+		"Value increased",
 		zap.String("name", v.Name),
 		zap.Int64("delta", *v.Delta),
 	)
@@ -81,7 +81,7 @@ func (s *InMemoryMetricsRepository) ReplaceValue(metric *model.Metrics) error {
 	}
 
 	if metric.Value == nil {
-		return fmt.Errorf("fiels \"Value\" is not define: %w", ErrFieldUndefine)
+		return fmt.Errorf("field \"Value\" is not define: %w", ErrFieldUndefine)
 	}
 
 	newValue := *metric.Value
