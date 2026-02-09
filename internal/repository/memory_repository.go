@@ -86,7 +86,7 @@ func (s *InMemoryMetricsRepository) ReplaceValue(metric *model.Metrics) error {
 
 	newValue := *metric.Value
 	v.Value = &newValue
-	
+
 	s.metrics[metric.ID] = v
 
 	s.logger.Info(
