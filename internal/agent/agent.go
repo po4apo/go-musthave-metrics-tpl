@@ -16,6 +16,7 @@ func GetMetrics() map[string]float64 {
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
 	return map[string]float64{
+		"Alloc":         float64(ms.Alloc),
 		"BuckHashSys":   float64(ms.BuckHashSys),
 		"Frees":         float64(ms.Frees),
 		"GCCPUFraction": float64(ms.GCCPUFraction),
