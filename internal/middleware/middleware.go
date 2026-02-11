@@ -68,7 +68,7 @@ func CustomLogger(logger *zap.Logger) func(http.Handler) http.Handler {
 // если Content-Type ответа поддерживается (text/html, application/json).
 type gzipResponseWriter struct {
 	http.ResponseWriter
-	gzWriter *gzip.Writer
+	gzWriter   *gzip.Writer
 	compressed bool
 }
 

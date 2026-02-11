@@ -55,20 +55,20 @@ func NewMapDumper(
 	return dumper, nil
 }
 
-func (dumper *MapDumper) RunMapDumper() (<-chan struct{}, error) {
+func (d *MapDumper) RunMapDumper() (<-chan struct{}, error) {
 	stop := make(chan struct{})
 
 	go func() {
-		defer dumper.Close()
-		ticker := time.NewTicker(dumper.storeInterval)
+		defer d.Close()
+		ticker := time.NewTicker(d.storeInterval)
 		defer ticker.Stop()
 
 		for {
 			select {
 			case <-ticker.C:
-				dumper.Save()
+				d.Save()
 			case <-stop:
-				dumper.Save()
+				d.Save()
 				return
 			}
 		}
