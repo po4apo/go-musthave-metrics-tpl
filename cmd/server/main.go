@@ -16,12 +16,12 @@ import (
 func main() {
 	startConf := parseFlags()
 
-	if err := run(startConf.Addr); err != nil {
+	if err := run(startConf); err != nil {
 		panic(fmt.Sprintf("Run server faliled: %v", err))
 	}
 }
 
-func run(addr string) error {
+func run(config startConig) error {
 	//TODO: заменить на slog
 	logger, err := zap.NewDevelopment()
 
@@ -30,11 +30,26 @@ func run(addr string) error {
 	}
 	defer logger.Sync()
 
-	logger.Info("Server starting", zap.String("addr", addr))
+	logger.Info("Server starting", zap.String("addr", config.Addr))
 
 	repo, err := repository.NewMemStorage(logger)
 	if err != nil {
 		return fmt.Errorf("failed to inittialize storage: %w", err)
+	}
+
+	dumper, err := repository.NewMapDumper(
+		&repo,
+		config.StoreInterval,
+		config.FileStoregePath,
+		config.Restore,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to inittialize dumper %w", err)
+	}
+
+	_, err = dumper.RunMapDumper()
+	if err != nil {
+		return fmt.Errorf("failed to run dumper %w", err)
 	}
 
 	r := chi.NewRouter()
@@ -50,7 +65,7 @@ func run(addr string) error {
 	r.Post("/value", handler.GetMetricWithBodyHandler(&repo))
 	r.Post("/value/", handler.GetMetricWithBodyHandler(&repo))
 
-	if err = http.ListenAndServe(addr, r); err != nil {
+	if err = http.ListenAndServe(config.Addr, r); err != nil {
 		return fmt.Errorf("failed to start server: %w", err)
 	}
 
