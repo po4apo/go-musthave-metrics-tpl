@@ -1,7 +1,9 @@
 package middleware
 
 import (
+	"bytes"
 	"compress/gzip"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -44,11 +46,27 @@ func CustomLogger(logger *zap.Logger) func(http.Handler) http.Handler {
 			uri := r.RequestURI
 			method := r.Method
 
-			logger.Info(
-				"Got request",
+			// Логирование body для методов с телом
+			var bodyLog string
+			if r.Body != nil && (method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch) {
+				const maxBodySize = 10 * 1024 // 10KB
+				bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, maxBodySize))
+				if err == nil {
+					bodyLog = string(bodyBytes)
+					// Восстанавливаем body для следующего обработчика
+					r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+				}
+			}
+
+			logFields := []zap.Field{
 				zap.String("method", method),
 				zap.String("uri", uri),
-			)
+			}
+			if bodyLog != "" {
+				logFields = append(logFields, zap.String("body", bodyLog))
+			}
+
+			logger.Info("Got request", logFields...)
 
 			next.ServeHTTP(&lwr, r)
 

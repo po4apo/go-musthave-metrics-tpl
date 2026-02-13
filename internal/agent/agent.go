@@ -55,7 +55,7 @@ func SendMetric(serverAddr string, m model.Metrics) error {
 
 	res, err := http.Post(url, "application/json", bytes.NewReader(requestBody))
 	if err != nil {
-		return fmt.Errorf("Failed to send metric %s: %w", m.Name, err)
+		return fmt.Errorf("failed to send metric %s: %w", m.Name, err)
 
 	}
 	defer res.Body.Close()
@@ -64,7 +64,7 @@ func SendMetric(serverAddr string, m model.Metrics) error {
 	res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("Got unexpected status code: %v\n Body: %v", res.StatusCode, body)
+		return fmt.Errorf("got unexpected status code: %v\n Body: %v", res.StatusCode, body)
 	}
 	return nil
 }
