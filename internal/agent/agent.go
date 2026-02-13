@@ -1,12 +1,12 @@
 package agent
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"runtime"
-	"strconv"
 
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/model"
 )
@@ -15,6 +15,7 @@ func GetMetrics() map[string]float64 {
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
 	return map[string]float64{
+		"Alloc":         float64(ms.Alloc),
 		"BuckHashSys":   float64(ms.BuckHashSys),
 		"Frees":         float64(ms.Frees),
 		"GCCPUFraction": float64(ms.GCCPUFraction),
@@ -44,21 +45,18 @@ func GetMetrics() map[string]float64 {
 	}
 }
 
-func SendMetric(serverAddr string, m model.Metrics) {
+func SendMetric(serverAddr string, m model.Metrics) error {
 	url := fmt.Sprintf("http://%s/update", serverAddr)
-	var metricValue string
 
-	if m.MType == model.Counter {
-		metricValue = strconv.FormatInt(*m.Delta, 10)
-	} else {
-		metricValue = strconv.FormatFloat(*m.Value, 'f', -1, 64)
+	requestBody, err := json.Marshal(m)
+	if err != nil {
+		return fmt.Errorf("failed to marshal json: %w", err)
 	}
 
-	request := url + "/" + m.MType + "/" + m.Name + "/" + metricValue
-	res, err := http.Post(request, "application/json", nil)
+	res, err := http.Post(url, "application/json", bytes.NewReader(requestBody))
 	if err != nil {
-		log.Printf("Failed to send metric %s: %v", m.Name, err)
-		return
+		return fmt.Errorf("failed to send metric %s: %w", m.Name, err)
+
 	}
 	defer res.Body.Close()
 
@@ -66,6 +64,7 @@ func SendMetric(serverAddr string, m model.Metrics) {
 	res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		log.Printf("Got unexpected status code: %v\n Body: %v", res.StatusCode, body)
+		return fmt.Errorf("got unexpected status code: %v\n Body: %v", res.StatusCode, body)
 	}
+	return nil
 }

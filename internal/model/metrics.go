@@ -1,6 +1,10 @@
 package model
 
-import "strings"
+import (
+	"encoding/json"
+	"errors"
+	"strings"
+)
 
 const (
 	Counter = "counter"
@@ -13,12 +17,44 @@ const (
 // что бы отличать значение "0", от не заданного значения
 // и соответственно не кодировать в структуру.
 type Metrics struct {
-	ID    string   `json:"id"`
+	ID    string   `json:"-"`
 	MType string   `json:"type"`
 	Delta *int64   `json:"delta,omitempty"`
 	Value *float64 `json:"value,omitempty"`
 	Hash  string   `json:"hash,omitempty"`
 	Name  string   `json:"name"`
+}
+
+// rawMetrics для разбора JSON: клиент может передать "id" или "name" как имя метрики.
+// Внутренний ID всегда генерируется на сервере (GenerateID), не принимается от клиента.
+type rawMetrics struct {
+	MType string   `json:"type"`
+	Delta *int64   `json:"delta,omitempty"`
+	Value *float64 `json:"value,omitempty"`
+	Hash  string   `json:"hash,omitempty"`
+	Name  string   `json:"name"`
+	ID    string   `json:"id"`
+}
+
+func (m *Metrics) UnmarshalJSON(data []byte) error {
+	var raw rawMetrics
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	name := strings.TrimSpace(raw.Name)
+	if name == "" {
+		name = strings.TrimSpace(raw.ID)
+	}
+	if name == "" {
+		return errors.New("field \"name\" or \"id\" is required")
+	}
+	m.MType = raw.MType
+	m.Delta = raw.Delta
+	m.Value = raw.Value
+	m.Hash = raw.Hash
+	m.Name = name
+	m.ID = GenerateID(raw.MType, name)
+	return nil
 }
 
 func GenerateID(mType string, name string) string {
