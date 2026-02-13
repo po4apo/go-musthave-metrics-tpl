@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 
-	"github.com/caarlos0/env"
+	"github.com/caarlos0/env/v11"
 )
 
 type startConf struct {

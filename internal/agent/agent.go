@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"runtime"
 
@@ -46,18 +45,18 @@ func GetMetrics() map[string]float64 {
 	}
 }
 
-func SendMetric(serverAddr string, m model.Metrics) {
+func SendMetric(serverAddr string, m model.Metrics) error {
 	url := fmt.Sprintf("http://%s/update", serverAddr)
 
 	requestBody, err := json.Marshal(m)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("failed to marshal json: %w", err)
 	}
 
 	res, err := http.Post(url, "application/json", bytes.NewReader(requestBody))
 	if err != nil {
-		log.Printf("Failed to send metric %s: %v", m.Name, err)
-		return
+		return fmt.Errorf("Failed to send metric %s: %w", m.Name, err)
+
 	}
 	defer res.Body.Close()
 
@@ -65,6 +64,7 @@ func SendMetric(serverAddr string, m model.Metrics) {
 	res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		log.Printf("Got unexpected status code: %v\n Body: %v", res.StatusCode, body)
+		return fmt.Errorf("Got unexpected status code: %v\n Body: %v", res.StatusCode, body)
 	}
+	return nil
 }

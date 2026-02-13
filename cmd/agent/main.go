@@ -4,6 +4,8 @@ import (
 	"math/rand"
 	"time"
 
+	"log"
+
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/agent"
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/model"
 )
@@ -21,11 +23,10 @@ func main() {
 
 		// получение метрик машины
 		for k, v := range agent.GetMetrics() {
-			value := v
 			metricsCollector = append(metricsCollector, model.Metrics{
 				MType: model.Gauge,
 				Name:  k,
-				Value: &value,
+				Value: &v,
 			})
 		}
 
@@ -56,7 +57,9 @@ func main() {
 		if iterationCount >= iterationPerRequest {
 			for _, mc := range metricsReport {
 				for _, m := range mc {
-					agent.SendMetric(startConf.Addr, m)
+					if err := agent.SendMetric(startConf.Addr, m); err != nil {
+						log.Fatal(err)
+					}
 				}
 			}
 			metricsReport = make([][]model.Metrics, 0)

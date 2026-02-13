@@ -27,6 +27,7 @@ import (
 //   - *http.Response: результат выполнения запроса
 
 func newLogger() *zap.Logger {
+
 	logger, _ := zap.NewDevelopment()
 	return logger
 
@@ -102,6 +103,7 @@ func TestUpdateMetricsHandler(t *testing.T) {
 		t.Run(
 			tt.name,
 			func(t *testing.T) {
+				t.Helper()
 				logger := newLogger()
 				repo, _ := repository.NewMemStorage(logger)
 				res := makeRequest(
@@ -185,6 +187,7 @@ func TestUpdateMetricsWithBodyHandler(t *testing.T) {
 		t.Run(
 			tt.name,
 			func(t *testing.T) {
+				t.Helper()
 				logger := newLogger()
 				repo, _ := repository.NewMemStorage(logger)
 
@@ -239,6 +242,7 @@ func TestUpdateMetricsWithBodyHandlerChangeValue(t *testing.T) {
 		t.Run(
 			tt.name,
 			func(t *testing.T) {
+				t.Helper()
 				repoState := []model.Metrics{
 					model.NewGaugeMetric("test_gauge", model.Ptr(2.1)),
 					model.NewCounterMetrics("test_counter", model.Ptr(int64(1))),
@@ -320,6 +324,7 @@ func TestGetMetricHandler(t *testing.T) {
 		t.Run(
 			tt.name,
 			func(t *testing.T) {
+				t.Helper()
 				repoState := []model.Metrics{
 					model.NewGaugeMetric("test_gauge", model.Ptr(2.1)),
 					model.NewCounterMetrics("test_counter", model.Ptr(int64(1))),
@@ -355,6 +360,7 @@ func TestViewMetrics(t *testing.T) {
 	t.Run(
 		"Проверка отображения метрик",
 		func(t *testing.T) {
+			t.Helper()
 			repoState := []model.Metrics{
 				model.NewGaugeMetric("test_gauge2", model.Ptr(2.1)),
 				model.NewGaugeMetric("test_gauge", model.Ptr(1.1)),

@@ -59,6 +59,7 @@ func TestIncreaseValue(t *testing.T) {
 		t.Run(
 			tt.name,
 			func(t *testing.T) {
+				t.Helper()
 				logger, _ := zap.NewDevelopment()
 				ms, _ := NewMemStorage(logger)
 				for _, metric := range tt.metrics {
@@ -93,6 +94,7 @@ func TestErrFieldUndefineIncreaseValue(t *testing.T) {
 		t.Run(
 			tt.name,
 			func(t *testing.T) {
+				t.Helper()
 				logger, _ := zap.NewDevelopment()
 				ms, _ := NewMemStorage(logger)
 
@@ -160,6 +162,7 @@ func TestReplaceValue(t *testing.T) {
 		t.Run(
 			tt.name,
 			func(t *testing.T) {
+				t.Helper()
 				logger, _ := zap.NewDevelopment()
 				ms, _ := NewMemStorage(logger)
 				for _, metric := range tt.metrics {
@@ -193,6 +196,7 @@ func TestErrFieldUndefineReplaceValue(t *testing.T) {
 		t.Run(
 			tt.name,
 			func(t *testing.T) {
+				t.Helper()
 				logger, _ := zap.NewDevelopment()
 				ms, _ := NewMemStorage(logger)
 
@@ -214,6 +218,7 @@ func TestErrUnsupportedTypeReplaceValue(t *testing.T) {
 	t.Run(
 		"ReplaceValue для MType = Counter",
 		func(t *testing.T) {
+			t.Helper()
 			logger, _ := zap.NewDevelopment()
 			ms, _ := NewMemStorage(logger)
 
@@ -229,6 +234,7 @@ func TestErrUnsupportedTypeIncreaseValue(t *testing.T) {
 	t.Run(
 		"IncreaseValue для MType = Gauge",
 		func(t *testing.T) {
+			t.Helper()
 			logger, _ := zap.NewDevelopment()
 			ms, _ := NewMemStorage(logger)
 

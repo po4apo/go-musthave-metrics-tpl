@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -17,12 +18,11 @@ func main() {
 	startConf := parseFlags()
 
 	if err := run(startConf); err != nil {
-		panic(fmt.Sprintf("Run server faliled: %v", err))
+		log.Fatalf("Run server faliled: %v", err)
 	}
 }
 
 func run(config startConig) error {
-	//TODO: заменить на slog
 	logger, err := zap.NewDevelopment()
 
 	if err != nil {
