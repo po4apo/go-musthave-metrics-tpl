@@ -3,7 +3,7 @@
 run-server:
 	go run ./cmd/server
 run-agent:
-	go run ./cmd/agent
+	go run ./cmd/agent -r 2 -p 1
 build:
 	go build ./...
 

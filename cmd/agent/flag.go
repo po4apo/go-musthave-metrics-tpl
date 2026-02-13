@@ -15,8 +15,8 @@ type startConf struct {
 func parseFlags() startConf {
 	var conf startConf
 	addr := flag.String("a", "localhost:8080", "addres of the metrics server (host:port)")
-	reportInterval := flag.Int("r", 2, "interval for sending metrics server (second)")
-	pollInterval := flag.Int("p", 1, "interval for collecting metrics")
+	reportInterval := flag.Int("r", 10, "interval for sending metrics server (second)")
+	pollInterval := flag.Int("p", 2, "interval for collecting metrics")
 
 	flag.Parse()
 
