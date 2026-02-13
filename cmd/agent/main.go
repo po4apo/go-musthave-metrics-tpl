@@ -58,7 +58,7 @@ func main() {
 			for _, mc := range metricsReport {
 				for _, m := range mc {
 					if err := agent.SendMetric(startConf.Addr, m); err != nil {
-						log.Fatal(err)
+						log.Print(err)
 					}
 				}
 			}
