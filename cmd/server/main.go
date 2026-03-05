@@ -32,6 +32,11 @@ func run(config startConig) error {
 
 	logger.Info("Server starting", zap.String("addr", config.Addr))
 
+	pgRepo, err := repository.NewPostgresStorage(logger, config.DatabaseDsn)
+	if err != nil {
+		return fmt.Errorf("failed to inittialize pg storage: %w", err)
+	}
+
 	repo, err := repository.NewMemStorage(logger)
 	if err != nil {
 		return fmt.Errorf("failed to inittialize storage: %w", err)
@@ -58,6 +63,7 @@ func run(config startConig) error {
 	r.Use(middleware.Timeout(30 * time.Second))
 
 	r.Get("/", handler.ViewMetrics(&repo))
+	r.Get("/ping", handler.PingDBHandler(pgRepo))
 	r.Post("/update/{type}/{name}/{value}", handler.UpdateMetricsHandler(&repo))
 	r.Post("/update", handler.UpdateMetricsWithBodyHandler(&repo))
 	r.Post("/update/", handler.UpdateMetricsWithBodyHandler(&repo))

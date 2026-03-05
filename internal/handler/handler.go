@@ -235,6 +235,22 @@ func GetMetricHandler(repo repository.MetricsRepository) http.HandlerFunc {
 	}
 }
 
+// Позже repository.PostgresRepository заменить на интерфейс
+func PingDBHandler(repo *repository.PostgresRepository) http.HandlerFunc {
+	return func(rw http.ResponseWriter, r *http.Request) {
+		rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
+
+		err := repo.Ping()
+		if err != nil {
+			rw.WriteHeader(http.StatusInternalServerError)
+			rw.Write([]byte("Internal Error"))
+			return
+		}
+		rw.WriteHeader(http.StatusOK)
+		rw.Write([]byte("OK"))
+	}
+}
+
 // metricValueResponse — формат ответа POST /value (id, type, value/delta по примеру API).
 type metricValueResponse struct {
 	ID    string   `json:"id"`
