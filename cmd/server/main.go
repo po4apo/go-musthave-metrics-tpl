@@ -34,7 +34,7 @@ func run(config startConig) error {
 
 	pgRepo, err := repository.NewPostgresStorage(logger, config.DatabaseDsn)
 	if err != nil {
-		return fmt.Errorf("failed to inittialize pg storage: %w", err)
+		logger.Warn("failed to inittialize pg storage", zap.Error(err))
 	}
 
 	repo, err := repository.NewMemStorage(logger)
