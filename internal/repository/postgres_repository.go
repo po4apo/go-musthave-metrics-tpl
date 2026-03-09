@@ -67,9 +67,9 @@ func (r *PostgresRepository) GetAll() ([]model.Metrics, error) {
 	return []model.Metrics{}, ErrNotEmplemented
 }
 
-func (repo *PostgresRepository) Ping() error {
+func (r *PostgresRepository) Ping() error {
 	ctx, canel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer canel()
-	return repo.db.PingContext(ctx)
+	return r.db.PingContext(ctx)
 
 }
