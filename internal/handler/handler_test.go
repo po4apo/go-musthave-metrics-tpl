@@ -110,7 +110,7 @@ func TestUpdateMetricsHandler(t *testing.T) {
 					"/update/{type}/{name}/{value}",
 					http.MethodPost,
 					tt.request,
-					UpdateMetricsHandler(&repo),
+					UpdateMetricsHandler(repo),
 					nil,
 				)
 
@@ -198,7 +198,7 @@ func TestUpdateMetricsWithBodyHandler(t *testing.T) {
 					endpoint,
 					http.MethodPost,
 					endpoint,
-					UpdateMetricsWithBodyHandler(&repo),
+					UpdateMetricsWithBodyHandler(repo),
 					bytes.NewReader(bBody),
 				)
 
@@ -258,7 +258,7 @@ func TestUpdateMetricsWithBodyHandlerChangeValue(t *testing.T) {
 					endpoint,
 					http.MethodPost,
 					endpoint,
-					UpdateMetricsWithBodyHandler(&repo),
+					UpdateMetricsWithBodyHandler(repo),
 					bytes.NewReader(bBody),
 				)
 
@@ -337,7 +337,7 @@ func TestGetMetricHandler(t *testing.T) {
 					"/value/{type}/{name}",
 					http.MethodGet,
 					tt.request,
-					GetMetricHandler(&repo),
+					GetMetricHandler(repo),
 					nil,
 				)
 
@@ -374,7 +374,7 @@ func TestViewMetrics(t *testing.T) {
 				"/",
 				http.MethodGet,
 				"/",
-				ViewMetrics(&repo),
+				ViewMetrics(repo),
 				nil,
 			)
 
