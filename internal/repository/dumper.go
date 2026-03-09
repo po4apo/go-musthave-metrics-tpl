@@ -2,6 +2,7 @@ package repository
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -55,9 +56,7 @@ func NewMapDumper(
 	return dumper, nil
 }
 
-func (d *MapDumper) RunMapDumper() (<-chan struct{}, error) {
-	stop := make(chan struct{})
-
+func (d *MapDumper) RunMapDumper(ctx context.Context) error {
 	go func() {
 		defer d.Close()
 		ticker := time.NewTicker(d.storeInterval)
@@ -67,14 +66,14 @@ func (d *MapDumper) RunMapDumper() (<-chan struct{}, error) {
 			select {
 			case <-ticker.C:
 				d.Save()
-			case <-stop:
+			case <-ctx.Done():
 				d.Save()
 				return
 			}
 		}
 	}()
 
-	return stop, nil
+	return nil
 }
 
 func (d *MapDumper) Save() error {
@@ -124,7 +123,9 @@ func (d *MapDumper) Load() error {
 		return err
 	}
 
-	d.repo.SetStateFromSlice(&metrics)
+	if err := d.repo.SetStateFromSlice(&metrics); err != nil {
+		return err
+	}
 
 	return nil
 }

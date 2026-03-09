@@ -9,6 +9,7 @@ import (
 	"database/sql"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/po4apo/go-musthave-metrics-tpl/internal/model"
 )
 
 type PostgresRepository struct {
@@ -40,6 +41,30 @@ func NewPostgresStorage(logger *zap.Logger, databaseDsn string) (*PostgresReposi
 	)
 
 	return &PostgresRepository{db, logger}, nil
+}
+
+func (r *PostgresRepository) SetStateFromSlice(*[]model.Metrics) error {
+	return ErrNotEmplemented
+}
+
+func (r *PostgresRepository) String() (string, error) {
+	return "", ErrNotEmplemented
+}
+
+func (r *PostgresRepository) IncreaseValue(*model.Metrics) error {
+	return ErrNotEmplemented
+}
+
+func (r *PostgresRepository) ReplaceValue(*model.Metrics) error {
+	return ErrNotEmplemented
+}
+
+func (r *PostgresRepository) GetMetric(string) (model.Metrics, error) {
+	return model.Metrics{}, ErrNotEmplemented
+}
+
+func (r *PostgresRepository) GetAll() ([]model.Metrics, error) {
+	return []model.Metrics{}, ErrNotEmplemented
 }
 
 func (repo *PostgresRepository) Ping() error {

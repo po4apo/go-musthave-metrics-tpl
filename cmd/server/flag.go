@@ -20,7 +20,8 @@ func parseFlags() startConig {
 	fileStoregePath := flag.String("f", "./dump.json", "path to file for storing metrics")
 	restore := flag.Bool("r", false, "restore metrics from file on startup")
 	databaseDsn := flag.String(
-		"d", "user=goclient password=12345678 host=localhost port=5432 database=testgo sslmode=disable",
+		"d",
+		"", // "user=goclient password=12345678 host=localhost port=5432 database=testgo sslmode=disable",
 		"database connection string (key/value format, e.g. user=postgres password=secret host=localhost port=5432 database=pgx_test sslmode=disable",
 	)
 

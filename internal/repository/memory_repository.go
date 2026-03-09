@@ -20,23 +20,24 @@ type InMemoryMetricsRepository struct {
 	logger  *zap.Logger
 }
 
-func NewMemStorage(logger *zap.Logger) (InMemoryMetricsRepository, error) {
+func NewMemStorage(logger *zap.Logger) (*InMemoryMetricsRepository, error) {
 	// размер не будем устанавливать через конфиг, так как это временное решение
 	// в дальнейшем будет полноценная БД
 	l := logger.With(zap.String("component", "MemStorage"))
 	l.Info(
 		"Create mem storage",
 	)
-	return InMemoryMetricsRepository{
+	return &InMemoryMetricsRepository{
 		metrics: make(map[string]model.Metrics, 128),
 		logger:  l,
 	}, nil
 }
 
-func (s *InMemoryMetricsRepository) SetStateFromSlice(repoState *[]model.Metrics) {
+func (s *InMemoryMetricsRepository) SetStateFromSlice(repoState *[]model.Metrics) error {
 	for _, m := range *repoState {
 		s.metrics[m.ID] = m
 	}
+	return nil
 }
 
 func (s *InMemoryMetricsRepository) IncreaseValue(metric *model.Metrics) error {
@@ -68,7 +69,8 @@ func (s *InMemoryMetricsRepository) IncreaseValue(metric *model.Metrics) error {
 		zap.String("name", v.Name),
 		zap.Int64("delta", *v.Delta),
 	)
-	s.logger.Debug("State", zap.String("state", s.String()))
+	state, err := s.String()
+	s.logger.Debug("State", zap.String("state", state), zap.Error(err))
 
 	return nil
 }
@@ -98,7 +100,8 @@ func (s *InMemoryMetricsRepository) ReplaceValue(metric *model.Metrics) error {
 		zap.String("name", v.Name),
 		zap.Float64("newValue", *v.Value),
 	)
-	s.logger.Debug("State", zap.String("state", s.String()))
+	state, err := s.String()
+	s.logger.Debug("State", zap.String("state", state), zap.Error(err))
 
 	return nil
 }
@@ -124,7 +127,11 @@ func (s *InMemoryMetricsRepository) GetAll() ([]model.Metrics, error) {
 	return r, nil
 }
 
-func (s *InMemoryMetricsRepository) String() string {
+func (s *InMemoryMetricsRepository) Ping() error {
+	return nil
+}
+
+func (s *InMemoryMetricsRepository) String() (string, error) {
 	b, _ := json.MarshalIndent(s.metrics, "", "  ")
-	return string(b)
+	return string(b), nil
 }

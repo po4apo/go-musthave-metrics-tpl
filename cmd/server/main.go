@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -23,6 +24,10 @@ func main() {
 }
 
 func run(config startConig) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var repo repository.MetricsRepository
 	logger, err := zap.NewDevelopment()
 
 	if err != nil {
@@ -31,30 +36,33 @@ func run(config startConig) error {
 	defer logger.Sync()
 
 	logger.Info("Server starting", zap.String("addr", config.Addr))
-
-	pgRepo, err := repository.NewPostgresStorage(logger, config.DatabaseDsn)
-	if err != nil {
-		logger.Warn("failed to inittialize pg storage", zap.Error(err))
+	if config.DatabaseDsn != "" {
+		repo, err = repository.NewPostgresStorage(logger, config.DatabaseDsn)
+		if err != nil {
+			logger.Warn("failed to inittialize pg storage", zap.Error(err))
+		}
+	} else {
+		repo, err = repository.NewMemStorage(logger)
+		if err != nil {
+			return fmt.Errorf("failed to inittialize storage: %w", err)
+		}
 	}
 
-	repo, err := repository.NewMemStorage(logger)
-	if err != nil {
-		return fmt.Errorf("failed to inittialize storage: %w", err)
-	}
+	v, ok := repo.(*repository.InMemoryMetricsRepository)
+	if ok {
+		dumper, err := repository.NewMapDumper(
+			v,
+			config.StoreInterval,
+			config.FileStoregePath,
+			config.Restore,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to inittialize dumper %w", err)
+		}
 
-	dumper, err := repository.NewMapDumper(
-		&repo,
-		config.StoreInterval,
-		config.FileStoregePath,
-		config.Restore,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to inittialize dumper %w", err)
-	}
-
-	_, err = dumper.RunMapDumper()
-	if err != nil {
-		return fmt.Errorf("failed to run dumper %w", err)
+		if err := dumper.RunMapDumper(ctx); err != nil {
+			return fmt.Errorf("failed to run dumper %w", err)
+		}
 	}
 
 	r := chi.NewRouter()
@@ -62,14 +70,14 @@ func run(config startConig) error {
 	r.Use(internalMiddleware.CompressGzip())
 	r.Use(middleware.Timeout(30 * time.Second))
 
-	r.Get("/", handler.ViewMetrics(&repo))
-	r.Get("/ping", handler.PingDBHandler(pgRepo))
-	r.Post("/update/{type}/{name}/{value}", handler.UpdateMetricsHandler(&repo))
-	r.Post("/update", handler.UpdateMetricsWithBodyHandler(&repo))
-	r.Post("/update/", handler.UpdateMetricsWithBodyHandler(&repo))
-	r.Get("/value/{type}/{name}", handler.GetMetricHandler(&repo))
-	r.Post("/value", handler.GetMetricWithBodyHandler(&repo))
-	r.Post("/value/", handler.GetMetricWithBodyHandler(&repo))
+	r.Get("/", handler.ViewMetrics(repo))
+	r.Get("/ping", handler.PingDBHandler(repo))
+	r.Post("/update/{type}/{name}/{value}", handler.UpdateMetricsHandler(repo))
+	r.Post("/update", handler.UpdateMetricsWithBodyHandler(repo))
+	r.Post("/update/", handler.UpdateMetricsWithBodyHandler(repo))
+	r.Get("/value/{type}/{name}", handler.GetMetricHandler(repo))
+	r.Post("/value", handler.GetMetricWithBodyHandler(repo))
+	r.Post("/value/", handler.GetMetricWithBodyHandler(repo))
 
 	if err = http.ListenAndServe(config.Addr, r); err != nil {
 		return fmt.Errorf("failed to start server: %w", err)

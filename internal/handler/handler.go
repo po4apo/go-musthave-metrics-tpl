@@ -104,17 +104,19 @@ func UpdateMetricsWithBodyHandler(repo repository.MetricsRepository) http.Handle
 		}
 
 		if metrics.MType == model.Counter {
-			repo.IncreaseValue(&metrics)
-			rw.WriteHeader(http.StatusOK)
-			rw.Write([]byte("Counter increased!"))
-			return
+			if err := repo.IncreaseValue(&metrics); err == nil {
+				rw.WriteHeader(http.StatusOK)
+				rw.Write([]byte("Counter increased!"))
+				return
+			}
 		}
 
 		if metrics.MType == model.Gauge {
-			repo.ReplaceValue(&metrics)
-			rw.WriteHeader(http.StatusOK)
-			rw.Write([]byte("Gauge repalced!"))
-			return
+			if err := repo.ReplaceValue(&metrics); err == nil {
+				rw.WriteHeader(http.StatusOK)
+				rw.Write([]byte("Gauge repalced!"))
+				return
+			}
 		}
 
 		rw.WriteHeader(http.StatusInternalServerError)
@@ -236,7 +238,7 @@ func GetMetricHandler(repo repository.MetricsRepository) http.HandlerFunc {
 }
 
 // Позже repository.PostgresRepository заменить на интерфейс
-func PingDBHandler(repo *repository.PostgresRepository) http.HandlerFunc {
+func PingDBHandler(repo repository.MetricsRepository) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
 
