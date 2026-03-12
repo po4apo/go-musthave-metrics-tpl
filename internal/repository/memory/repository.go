@@ -2,17 +2,11 @@ package repository
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/model"
+	repoerrors "github.com/po4apo/go-musthave-metrics-tpl/internal/repository/errors"
 	"go.uber.org/zap"
-)
-
-var (
-	ErrUnsupportedType = errors.New("the metric type unsupport this action")
-	ErrFieldUndefine   = errors.New("required field is not define")
-	ErrNotFound        = errors.New("notfound")
 )
 
 type InMemoryMetricsRepository struct {
@@ -42,7 +36,7 @@ func (s *InMemoryMetricsRepository) SetStateFromSlice(repoState *[]model.Metrics
 
 func (s *InMemoryMetricsRepository) IncreaseValue(metric *model.Metrics) error {
 	if metric.MType != model.Counter {
-		return fmt.Errorf("failed increase %v by %v: %w", metric.Name, metric.Value, ErrUnsupportedType)
+		return fmt.Errorf("failed increase %v by %v: %w", metric.Name, metric.Value, repoerrors.ErrUnsupportedType)
 	}
 	v, exists := s.metrics[metric.ID]
 	if !exists {
@@ -51,7 +45,7 @@ func (s *InMemoryMetricsRepository) IncreaseValue(metric *model.Metrics) error {
 	}
 
 	if metric.Delta == nil {
-		return fmt.Errorf("field \"Delta\" is not define: %w", ErrFieldUndefine)
+		return fmt.Errorf("field \"Delta\" is not define: %w", repoerrors.ErrFieldUndefine)
 	}
 
 	if v.Delta == nil {
@@ -77,7 +71,7 @@ func (s *InMemoryMetricsRepository) IncreaseValue(metric *model.Metrics) error {
 
 func (s *InMemoryMetricsRepository) ReplaceValue(metric *model.Metrics) error {
 	if metric.MType != model.Gauge {
-		return fmt.Errorf("failed replace %v by %v: %w", metric.Name, metric.Value, ErrUnsupportedType)
+		return fmt.Errorf("failed replace %v by %v: %w", metric.Name, metric.Value, repoerrors.ErrUnsupportedType)
 	}
 
 	v, exists := s.metrics[metric.ID]
@@ -87,7 +81,7 @@ func (s *InMemoryMetricsRepository) ReplaceValue(metric *model.Metrics) error {
 	}
 
 	if metric.Value == nil {
-		return fmt.Errorf("field \"Value\" is not define: %w", ErrFieldUndefine)
+		return fmt.Errorf("field \"Value\" is not define: %w", repoerrors.ErrFieldUndefine)
 	}
 
 	newValue := *metric.Value
@@ -109,7 +103,7 @@ func (s *InMemoryMetricsRepository) ReplaceValue(metric *model.Metrics) error {
 func (s *InMemoryMetricsRepository) GetMetric(id string) (model.Metrics, error) {
 	metric, ok := s.metrics[id]
 	if !ok {
-		return model.Metrics{}, ErrNotFound
+		return model.Metrics{}, repoerrors.ErrNotFound
 	}
 
 	s.logger.Info(

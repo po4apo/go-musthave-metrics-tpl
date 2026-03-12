@@ -12,6 +12,8 @@ import (
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/handler"
 	internalMiddleware "github.com/po4apo/go-musthave-metrics-tpl/internal/middleware"
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/repository"
+	memrepo "github.com/po4apo/go-musthave-metrics-tpl/internal/repository/memory"
+	pgrepo "github.com/po4apo/go-musthave-metrics-tpl/internal/repository/pg"
 	"go.uber.org/zap"
 )
 
@@ -37,20 +39,20 @@ func run(config startConig) error {
 
 	logger.Info("Server starting", zap.String("addr", config.Addr))
 	if config.DatabaseDsn != "" {
-		repo, err = repository.NewPostgresStorage(logger, config.DatabaseDsn)
+		repo, err = pgrepo.NewPostgresStorage(ctx, logger, config.DatabaseDsn)
 		if err != nil {
 			logger.Warn("failed to inittialize pg storage", zap.Error(err))
 		}
 	} else {
-		repo, err = repository.NewMemStorage(logger)
+		repo, err = memrepo.NewMemStorage(logger)
 		if err != nil {
 			return fmt.Errorf("failed to inittialize storage: %w", err)
 		}
 	}
 
-	v, ok := repo.(*repository.InMemoryMetricsRepository)
+	v, ok := repo.(*memrepo.InMemoryMetricsRepository)
 	if ok {
-		dumper, err := repository.NewMapDumper(
+		dumper, err := memrepo.NewMapDumper(
 			v,
 			config.StoreInterval,
 			config.FileStoregePath,

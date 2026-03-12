@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/model"
+	repoerrors "github.com/po4apo/go-musthave-metrics-tpl/internal/repository/errors"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )
@@ -105,7 +106,7 @@ func TestErrFieldUndefineIncreaseValue(t *testing.T) {
 				m2 := model.NewCounterMetrics("test1", tt.secondaryValue)
 				err = ms.IncreaseValue(&m2)
 				assert.Error(t, err)
-				assert.ErrorAs(t, err, &ErrFieldUndefine)
+				assert.ErrorAs(t, err, &repoerrors.ErrFieldUndefine)
 			},
 		)
 	}
@@ -207,7 +208,7 @@ func TestErrFieldUndefineReplaceValue(t *testing.T) {
 				m2 := model.NewGaugeMetric("test1", tt.secondaryValue)
 				err = ms.ReplaceValue(&m2)
 				assert.Error(t, err)
-				assert.ErrorAs(t, err, &ErrFieldUndefine)
+				assert.ErrorAs(t, err, &repoerrors.ErrFieldUndefine)
 			},
 		)
 	}
@@ -225,7 +226,7 @@ func TestErrUnsupportedTypeReplaceValue(t *testing.T) {
 			m1 := model.NewCounterMetrics("test1", model.Ptr(int64(1)))
 			err := ms.ReplaceValue(&m1)
 			assert.Error(t, err)
-			assert.ErrorAs(t, err, &ErrUnsupportedType)
+			assert.ErrorAs(t, err, &repoerrors.ErrUnsupportedType)
 		},
 	)
 }
@@ -241,7 +242,7 @@ func TestErrUnsupportedTypeIncreaseValue(t *testing.T) {
 			m1 := model.NewGaugeMetric("test1", model.Ptr(1.0))
 			err := ms.IncreaseValue(&m1)
 			assert.Error(t, err)
-			assert.ErrorAs(t, err, &ErrUnsupportedType)
+			assert.ErrorAs(t, err, &repoerrors.ErrUnsupportedType)
 		},
 	)
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/model"
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/repository"
+	repoerrors "github.com/po4apo/go-musthave-metrics-tpl/internal/repository/errors"
 	"go.uber.org/zap"
 )
 
@@ -104,21 +105,24 @@ func UpdateMetricsWithBodyHandler(repo repository.MetricsRepository) http.Handle
 		}
 
 		if metrics.MType == model.Counter {
-			if err := repo.IncreaseValue(&metrics); err == nil {
+			if err = repo.IncreaseValue(&metrics); err == nil {
 				rw.WriteHeader(http.StatusOK)
 				rw.Write([]byte("Counter increased!"))
 				return
+			} else {
+
 			}
 		}
 
 		if metrics.MType == model.Gauge {
-			if err := repo.ReplaceValue(&metrics); err == nil {
+			if err = repo.ReplaceValue(&metrics); err == nil {
 				rw.WriteHeader(http.StatusOK)
 				rw.Write([]byte("Gauge repalced!"))
 				return
 			}
 		}
 
+		fmt.Print(err)
 		rw.WriteHeader(http.StatusInternalServerError)
 		rw.Write([]byte("Unexpected error! Contact support"))
 	}
@@ -220,7 +224,7 @@ func GetMetricHandler(repo repository.MetricsRepository) http.HandlerFunc {
 
 		metric, err := repo.GetMetric(id)
 		log.Print(metric)
-		if errors.Is(err, repository.ErrNotFound) {
+		if errors.Is(err, repoerrors.ErrNotFound) {
 			rw.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -293,7 +297,7 @@ func GetMetricWithBodyHandler(repo repository.MetricsRepository) http.HandlerFun
 		}
 		id := model.GenerateID(req.Type, name)
 		metric, err := repo.GetMetric(id)
-		if errors.Is(err, repository.ErrNotFound) {
+		if errors.Is(err, repoerrors.ErrNotFound) {
 			rw.WriteHeader(http.StatusNotFound)
 			return
 		}

@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/model"
-	"github.com/po4apo/go-musthave-metrics-tpl/internal/repository"
+	memrepo "github.com/po4apo/go-musthave-metrics-tpl/internal/repository/memory"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )
@@ -105,7 +105,7 @@ func TestUpdateMetricsHandler(t *testing.T) {
 			func(t *testing.T) {
 				t.Helper()
 				logger := newLogger()
-				repo, _ := repository.NewMemStorage(logger)
+				repo, _ := memrepo.NewMemStorage(logger)
 				res := makeRequest(
 					"/update/{type}/{name}/{value}",
 					http.MethodPost,
@@ -189,7 +189,7 @@ func TestUpdateMetricsWithBodyHandler(t *testing.T) {
 			func(t *testing.T) {
 				t.Helper()
 				logger := newLogger()
-				repo, _ := repository.NewMemStorage(logger)
+				repo, _ := memrepo.NewMemStorage(logger)
 
 				bBody, err := json.Marshal(tt.body)
 				assert.NoError(t, err)
@@ -248,7 +248,7 @@ func TestUpdateMetricsWithBodyHandlerChangeValue(t *testing.T) {
 					model.NewCounterMetrics("test_counter", model.Ptr(int64(1))),
 				}
 				logger := newLogger()
-				repo, _ := repository.NewMemStorage(logger)
+				repo, _ := memrepo.NewMemStorage(logger)
 				repo.SetStateFromSlice(&repoState)
 
 				bBody, err := json.Marshal(tt.body)
@@ -330,7 +330,7 @@ func TestGetMetricHandler(t *testing.T) {
 					model.NewCounterMetrics("test_counter", model.Ptr(int64(1))),
 				}
 				logger := newLogger()
-				repo, _ := repository.NewMemStorage(logger)
+				repo, _ := memrepo.NewMemStorage(logger)
 				repo.SetStateFromSlice(&repoState)
 
 				res := makeRequest(
@@ -367,7 +367,7 @@ func TestViewMetrics(t *testing.T) {
 				model.NewCounterMetrics("test_counter", model.Ptr(int64(1))),
 			}
 			logger := newLogger()
-			repo, _ := repository.NewMemStorage(logger)
+			repo, _ := memrepo.NewMemStorage(logger)
 			repo.SetStateFromSlice(&repoState)
 
 			res := makeRequest(

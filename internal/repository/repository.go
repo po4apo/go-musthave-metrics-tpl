@@ -1,12 +1,10 @@
 package repository
 
 import (
-	"errors"
-
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/model"
+	memrepo "github.com/po4apo/go-musthave-metrics-tpl/internal/repository/memory"
+	pgrepo "github.com/po4apo/go-musthave-metrics-tpl/internal/repository/pg"
 )
-
-var ErrNotEmplemented error = errors.New("this method is not implemented")
 
 type MetricsRepository interface {
 	// вспомогательные
@@ -23,5 +21,5 @@ type MetricsRepository interface {
 	Ping() error
 }
 
-var _ MetricsRepository = (*InMemoryMetricsRepository)(nil)
-var _ MetricsRepository = (*PostgresRepository)(nil)
+var _ MetricsRepository = (*memrepo.InMemoryMetricsRepository)(nil)
+var _ MetricsRepository = (*pgrepo.PostgresRepository)(nil)
