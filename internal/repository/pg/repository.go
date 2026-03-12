@@ -44,7 +44,7 @@ func (r PostgresRepository) createMetricsTable(ctx context.Context) error {
 		return fmt.Errorf("table metrics doesn't exist")
 	}
 
-	query := "CREATE TABLE " + tableName + " " +
+	query := "CREATE TABLE IF NOT EXISTS " + tableName + " " +
 		"(id VARCHAR(255) PRIMARY KEY," +
 		"name VARCHAR(255) NOT NULL," +
 		"type VARCHAR(255) NOT NULL," +
@@ -80,8 +80,13 @@ func NewPostgresStorage(ctx context.Context, logger *zap.Logger, databaseDsn str
 		"Db connection inizialized",
 		zap.String("databaseDsn", databaseDsn),
 	)
+	repo := &PostgresRepository{db, logger, ctx, tables}
 
-	return &PostgresRepository{db, logger, ctx, tables}, nil
+	if err := repo.createMetricsTable(ctx); err != nil {
+		return nil, fmt.Errorf("failed to create metrics table: %w", err)
+	}
+
+	return repo, nil
 }
 
 func (r *PostgresRepository) SetStateFromSlice(state *[]model.Metrics) error {
