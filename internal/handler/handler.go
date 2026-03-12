@@ -109,8 +109,6 @@ func UpdateMetricsWithBodyHandler(repo repository.MetricsRepository) http.Handle
 				rw.WriteHeader(http.StatusOK)
 				rw.Write([]byte("Counter increased!"))
 				return
-			} else {
-
 			}
 		}
 
@@ -122,7 +120,6 @@ func UpdateMetricsWithBodyHandler(repo repository.MetricsRepository) http.Handle
 			}
 		}
 
-		fmt.Print(err)
 		rw.WriteHeader(http.StatusInternalServerError)
 		rw.Write([]byte("Unexpected error! Contact support"))
 	}

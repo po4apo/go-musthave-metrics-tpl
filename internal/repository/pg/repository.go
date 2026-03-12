@@ -35,13 +35,13 @@ func (r PostgresRepository) changeTable(key, value string) error {
 		r.tables[key] = value
 		return nil
 	}
-	return fmt.Errorf("Table %s doesn't exist", key)
+	return fmt.Errorf("table %s doesn't exist", key)
 }
 
 func (r PostgresRepository) createMetricsTable(ctx context.Context) error {
 	tableName, ok := r.tables["metrics"]
 	if !ok {
-		return fmt.Errorf("Table metrics doesn't exist")
+		return fmt.Errorf("table metrics doesn't exist")
 	}
 
 	query := "CREATE TABLE " + tableName + " " +
