@@ -61,7 +61,7 @@ func (r PostgresRepository) createMetricsTable(ctx context.Context) error {
 		"name VARCHAR(255) NOT NULL," +
 		"type VARCHAR(255) NOT NULL," +
 		"value DOUBLE PRECISION," +
-		"delta INTEGER);"
+		"delta BIGINT);"
 
 	_, err := r.db.ExecContext(ctx, query)
 	return err
