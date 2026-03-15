@@ -11,9 +11,12 @@ import (
 
 	"database/sql"
 
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/model"
 	repoerrors "github.com/po4apo/go-musthave-metrics-tpl/internal/repository/errors"
+	"github.com/po4apo/go-musthave-metrics-tpl/internal/retry"
 )
 
 const (
@@ -22,6 +25,15 @@ const (
 	IncreaseValueTimeout = 5 * time.Second
 	ReplaceValueTimeout  = 5 * time.Second
 )
+
+// isPgConnError возвращает true, если ошибка относится к Class 08 — Connection Exception.
+func isPgConnError(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgerrcode.IsConnectionException(pgErr.Code)
+	}
+	return false
+}
 
 type PostgresRepository struct {
 	db     *sql.DB
@@ -136,36 +148,36 @@ func (r *PostgresRepository) IncreaseValue(metric *model.Metrics) error {
 	if metric.Delta == nil {
 		return fmt.Errorf("field \"Delta\" is not define: %w", repoerrors.ErrFieldUndefine)
 	}
-	ctx, cancel := context.WithTimeout(r.ctx, IncreaseValueTimeout)
-	defer cancel()
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	var m model.Metrics
-	row := tx.QueryRow("SELECT id, name, type, value, delta from "+r.tables["metrics"]+
-		" WHERE id=$1;", metric.ID)
-	if err := row.Scan(&m.ID, &m.Name, &m.MType, &m.Value, &m.Delta); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			query := "INSERT INTO " + r.tables["metrics"] + " (id, name, type, value, delta) " +
-				"VALUES ($1, $2, $3, $4, $5)"
-			_, err := tx.Exec(query, metric.ID, metric.Name, metric.MType, nil, *metric.Delta)
-			if err != nil {
-				return err
-			}
-			err = tx.Commit()
+
+	return retry.Do(func() error {
+		ctx, cancel := context.WithTimeout(r.ctx, IncreaseValueTimeout)
+		defer cancel()
+		tx, err := r.db.BeginTx(ctx, nil)
+		if err != nil {
 			return err
 		}
-		return err
-	}
-	newDelta := *m.Delta + *metric.Delta
-	_, err = tx.Exec("UPDATE "+r.tables["metrics"]+" SET delta=$1 WHERE id=$2", newDelta, m.ID)
-	if err != nil {
-		return err
-	}
-	err = tx.Commit()
-	return err
+		defer tx.Rollback()
 
+		var m model.Metrics
+		row := tx.QueryRow("SELECT id, name, type, value, delta from "+r.tables["metrics"]+
+			" WHERE id=$1;", metric.ID)
+		if err := row.Scan(&m.ID, &m.Name, &m.MType, &m.Value, &m.Delta); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				query := "INSERT INTO " + r.tables["metrics"] + " (id, name, type, value, delta) " +
+					"VALUES ($1, $2, $3, $4, $5)"
+				if _, err := tx.Exec(query, metric.ID, metric.Name, metric.MType, nil, *metric.Delta); err != nil {
+					return err
+				}
+				return tx.Commit()
+			}
+			return err
+		}
+		newDelta := *m.Delta + *metric.Delta
+		if _, err = tx.Exec("UPDATE "+r.tables["metrics"]+" SET delta=$1 WHERE id=$2", newDelta, m.ID); err != nil {
+			return err
+		}
+		return tx.Commit()
+	}, isPgConnError)
 }
 
 func (r *PostgresRepository) ReplaceValue(metric *model.Metrics) error {
@@ -177,142 +189,155 @@ func (r *PostgresRepository) ReplaceValue(metric *model.Metrics) error {
 		return fmt.Errorf("field \"Value\" is not define: %w", repoerrors.ErrFieldUndefine)
 	}
 
-	ctx, cancel := context.WithTimeout(r.ctx, ReplaceValueTimeout)
-	defer cancel()
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
+	return retry.Do(func() error {
+		ctx, cancel := context.WithTimeout(r.ctx, ReplaceValueTimeout)
+		defer cancel()
+		tx, err := r.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
 
-	query := "insert into " + r.tables["metrics"] + " (id, name, type, value)" +
-		"values ($1, $2, $3, $4) on conflict(id) do update set value=$4;"
+		query := "insert into " + r.tables["metrics"] + " (id, name, type, value)" +
+			"values ($1, $2, $3, $4) on conflict(id) do update set value=$4;"
 
-	_, err = tx.Exec(query, metric.ID, metric.Name, metric.MType, *metric.Value)
-	if err != nil {
-		return err
-	}
-	tx.Commit()
-	return nil
+		if _, err = tx.Exec(query, metric.ID, metric.Name, metric.MType, *metric.Value); err != nil {
+			return err
+		}
+		return tx.Commit()
+	}, isPgConnError)
 }
 
 const BatchUpdateTimeout = 10 * time.Second
 
 func (r *PostgresRepository) BatchUpdate(metrics []model.Metrics) error {
-	ctx, cancel := context.WithTimeout(r.ctx, BatchUpdateTimeout)
-	defer cancel()
+	return retry.Do(func() error {
+		ctx, cancel := context.WithTimeout(r.ctx, BatchUpdateTimeout)
+		defer cancel()
 
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer tx.Rollback()
-
-	tableName := r.tables["metrics"]
-
-	gaugeStmt, err := tx.PrepareContext(ctx,
-		"INSERT INTO "+tableName+" (id, name, type, value) "+
-			"VALUES ($1, $2, $3, $4) ON CONFLICT(id) DO UPDATE SET value = $4")
-	if err != nil {
-		return fmt.Errorf("prepare gauge stmt: %w", err)
-	}
-	defer gaugeStmt.Close()
-
-	counterSelectStmt, err := tx.PrepareContext(ctx,
-		"SELECT delta FROM "+tableName+" WHERE id = $1")
-	if err != nil {
-		return fmt.Errorf("prepare counter select stmt: %w", err)
-	}
-	defer counterSelectStmt.Close()
-
-	counterInsertStmt, err := tx.PrepareContext(ctx,
-		"INSERT INTO "+tableName+" (id, name, type, delta) "+
-			"VALUES ($1, $2, $3, $4) ON CONFLICT(id) DO UPDATE SET delta = $4")
-	if err != nil {
-		return fmt.Errorf("prepare counter insert stmt: %w", err)
-	}
-	defer counterInsertStmt.Close()
-
-	for i := range metrics {
-		m := metrics[i]
-		m.ID = model.GenerateID(m.MType, m.Name)
-
-		switch m.MType {
-		case model.Gauge:
-			if m.Value == nil {
-				return fmt.Errorf("field \"value\" is required for gauge %s", m.Name)
-			}
-			if _, err := gaugeStmt.ExecContext(ctx, m.ID, m.Name, m.MType, *m.Value); err != nil {
-				return fmt.Errorf("upsert gauge %s: %w", m.Name, err)
-			}
-
-		case model.Counter:
-			if m.Delta == nil {
-				return fmt.Errorf("field \"delta\" is required for counter %s", m.Name)
-			}
-			var existingDelta sql.NullInt64
-			err := counterSelectStmt.QueryRowContext(ctx, m.ID).Scan(&existingDelta)
-			if err != nil && !errors.Is(err, sql.ErrNoRows) {
-				return fmt.Errorf("select counter %s: %w", m.Name, err)
-			}
-			newDelta := *m.Delta
-			if existingDelta.Valid {
-				newDelta += existingDelta.Int64
-			}
-			if _, err := counterInsertStmt.ExecContext(ctx, m.ID, m.Name, m.MType, newDelta); err != nil {
-				return fmt.Errorf("upsert counter %s: %w", m.Name, err)
-			}
-
-		default:
-			return fmt.Errorf("unknown metric type: %s", m.MType)
+		tx, err := r.db.BeginTx(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("begin tx: %w", err)
 		}
-	}
+		defer tx.Rollback()
 
-	return tx.Commit()
+		tableName := r.tables["metrics"]
+
+		gaugeStmt, err := tx.PrepareContext(ctx,
+			"INSERT INTO "+tableName+" (id, name, type, value) "+
+				"VALUES ($1, $2, $3, $4) ON CONFLICT(id) DO UPDATE SET value = $4")
+		if err != nil {
+			return fmt.Errorf("prepare gauge stmt: %w", err)
+		}
+		defer gaugeStmt.Close()
+
+		counterSelectStmt, err := tx.PrepareContext(ctx,
+			"SELECT delta FROM "+tableName+" WHERE id = $1")
+		if err != nil {
+			return fmt.Errorf("prepare counter select stmt: %w", err)
+		}
+		defer counterSelectStmt.Close()
+
+		counterInsertStmt, err := tx.PrepareContext(ctx,
+			"INSERT INTO "+tableName+" (id, name, type, delta) "+
+				"VALUES ($1, $2, $3, $4) ON CONFLICT(id) DO UPDATE SET delta = $4")
+		if err != nil {
+			return fmt.Errorf("prepare counter insert stmt: %w", err)
+		}
+		defer counterInsertStmt.Close()
+
+		for i := range metrics {
+			m := metrics[i]
+			m.ID = model.GenerateID(m.MType, m.Name)
+
+			switch m.MType {
+			case model.Gauge:
+				if m.Value == nil {
+					return fmt.Errorf("field \"value\" is required for gauge %s", m.Name)
+				}
+				if _, err := gaugeStmt.ExecContext(ctx, m.ID, m.Name, m.MType, *m.Value); err != nil {
+					return fmt.Errorf("upsert gauge %s: %w", m.Name, err)
+				}
+
+			case model.Counter:
+				if m.Delta == nil {
+					return fmt.Errorf("field \"delta\" is required for counter %s", m.Name)
+				}
+				var existingDelta sql.NullInt64
+				err := counterSelectStmt.QueryRowContext(ctx, m.ID).Scan(&existingDelta)
+				if err != nil && !errors.Is(err, sql.ErrNoRows) {
+					return fmt.Errorf("select counter %s: %w", m.Name, err)
+				}
+				newDelta := *m.Delta
+				if existingDelta.Valid {
+					newDelta += existingDelta.Int64
+				}
+				if _, err := counterInsertStmt.ExecContext(ctx, m.ID, m.Name, m.MType, newDelta); err != nil {
+					return fmt.Errorf("upsert counter %s: %w", m.Name, err)
+				}
+
+			default:
+				return fmt.Errorf("unknown metric type: %s", m.MType)
+			}
+		}
+
+		return tx.Commit()
+	}, isPgConnError)
 }
 
 func (r *PostgresRepository) GetMetric(id string) (model.Metrics, error) {
-	ctx, cancel := context.WithTimeout(r.ctx, SelectRowTimeout)
-	defer cancel()
-
 	var m model.Metrics
+	err := retry.Do(func() error {
+		ctx, cancel := context.WithTimeout(r.ctx, SelectRowTimeout)
+		defer cancel()
 
-	query := "SELECT id, name, type, value, delta from " + r.tables["metrics"] +
-		" WHERE id = $1;"
+		query := "SELECT id, name, type, value, delta from " + r.tables["metrics"] +
+			" WHERE id = $1;"
 
-	row := r.db.QueryRowContext(ctx, query, id)
-	if err := row.Scan(&m.ID, &m.Name, &m.MType, &m.Value, &m.Delta); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return model.Metrics{}, repoerrors.ErrNotFound
+		row := r.db.QueryRowContext(ctx, query, id)
+		if err := row.Scan(&m.ID, &m.Name, &m.MType, &m.Value, &m.Delta); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return repoerrors.ErrNotFound
+			}
+			return err
 		}
-		return model.Metrics{}, err
-	}
-	return m, nil
+		return nil
+	}, isPgConnError)
+
+	return m, err
 }
 
 func (r *PostgresRepository) GetAll() ([]model.Metrics, error) {
-	metrics := make([]model.Metrics, 0, 128)
-	ctx, cancel := context.WithTimeout(r.ctx, SelectRowTimeout)
-	defer cancel()
+	var result []model.Metrics
+	err := retry.Do(func() error {
+		ctx, cancel := context.WithTimeout(r.ctx, SelectRowTimeout)
+		defer cancel()
 
-	rows, err := r.db.QueryContext(ctx, "SELECT * FROM "+r.tables["metrics"])
+		rows, err := r.db.QueryContext(ctx, "SELECT * FROM "+r.tables["metrics"])
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		metrics := make([]model.Metrics, 0, 128)
+		for rows.Next() {
+			var m model.Metrics
+			if err := rows.Scan(&m.ID, &m.Name, &m.MType, &m.Value, &m.Delta); err != nil {
+				return err
+			}
+			metrics = append(metrics, m)
+		}
+		if err = rows.Err(); err != nil {
+			return err
+		}
+		result = metrics
+		return nil
+	}, isPgConnError)
+
 	if err != nil {
 		return []model.Metrics{}, err
 	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var m model.Metrics
-		if err := rows.Scan(&m.ID, &m.Name, &m.MType, &m.Value, &m.Delta); err != nil {
-			return []model.Metrics{}, err
-		}
-		metrics = append(metrics, m)
-	}
-
-	if err = rows.Err(); err != nil {
-		return []model.Metrics{}, err
-	}
-
-	return metrics, nil
+	return result, nil
 }
 
 func (r *PostgresRepository) Ping() error {

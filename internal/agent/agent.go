@@ -4,12 +4,16 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"runtime"
+	"syscall"
 
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/model"
+	"github.com/po4apo/go-musthave-metrics-tpl/internal/retry"
 )
 
 func GetMetrics() map[string]float64 {
@@ -46,6 +50,18 @@ func GetMetrics() map[string]float64 {
 	}
 }
 
+// isConnError определяет, является ли ошибка временной ошибкой соединения.
+func isConnError(err error) bool {
+	var netErr *net.OpError
+	if errors.As(err, &netErr) {
+		return true
+	}
+	if errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.ECONNABORTED) {
+		return true
+	}
+	return false
+}
+
 func SendMetric(serverAddr string, m model.Metrics) error {
 	url := fmt.Sprintf("http://%s/update", serverAddr)
 
@@ -54,20 +70,19 @@ func SendMetric(serverAddr string, m model.Metrics) error {
 		return fmt.Errorf("failed to marshal json: %w", err)
 	}
 
-	res, err := http.Post(url, "application/json", bytes.NewReader(requestBody))
-	if err != nil {
-		return fmt.Errorf("failed to send metric %s: %w", m.Name, err)
+	return retry.Do(func() error {
+		res, err := http.Post(url, "application/json", bytes.NewReader(requestBody))
+		if err != nil {
+			return fmt.Errorf("failed to send metric %s: %w", m.Name, err)
+		}
+		defer res.Body.Close()
 
-	}
-	defer res.Body.Close()
-
-	body, _ := io.ReadAll(res.Body)
-	res.Body.Close()
-
-	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("got unexpected status code: %v\n Body: %v", res.StatusCode, body)
-	}
-	return nil
+		body, _ := io.ReadAll(res.Body)
+		if res.StatusCode != http.StatusOK {
+			return fmt.Errorf("got unexpected status code: %v\n Body: %v", res.StatusCode, body)
+		}
+		return nil
+	}, isConnError)
 }
 
 // SendMetricsBatch отправляет батч метрик на /updates/ с gzip-сжатием.
@@ -83,31 +98,33 @@ func SendMetricsBatch(serverAddr string, metrics []model.Metrics) error {
 		return fmt.Errorf("failed to marshal json: %w", err)
 	}
 
-	var buf bytes.Buffer
-	gw := gzip.NewWriter(&buf)
-	if _, err := gw.Write(jsonData); err != nil {
-		return fmt.Errorf("failed to compress body: %w", err)
-	}
-	if err := gw.Close(); err != nil {
-		return fmt.Errorf("failed to close gzip writer: %w", err)
-	}
+	return retry.Do(func() error {
+		var buf bytes.Buffer
+		gw := gzip.NewWriter(&buf)
+		if _, err := gw.Write(jsonData); err != nil {
+			return fmt.Errorf("failed to compress body: %w", err)
+		}
+		if err := gw.Close(); err != nil {
+			return fmt.Errorf("failed to close gzip writer: %w", err)
+		}
 
-	req, err := http.NewRequest(http.MethodPost, url, &buf)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Content-Encoding", "gzip")
+		req, err := http.NewRequest(http.MethodPost, url, &buf)
+		if err != nil {
+			return fmt.Errorf("failed to create request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Encoding", "gzip")
 
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to send batch: %w", err)
-	}
-	defer res.Body.Close()
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return fmt.Errorf("failed to send batch: %w", err)
+		}
+		defer res.Body.Close()
 
-	body, _ := io.ReadAll(res.Body)
-	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("got unexpected status code: %v\n Body: %s", res.StatusCode, body)
-	}
-	return nil
+		body, _ := io.ReadAll(res.Body)
+		if res.StatusCode != http.StatusOK {
+			return fmt.Errorf("got unexpected status code: %v\n Body: %s", res.StatusCode, body)
+		}
+		return nil
+	}, isConnError)
 }
