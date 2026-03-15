@@ -77,6 +77,8 @@ func run(config startConig) error {
 	r.Post("/update/{type}/{name}/{value}", handler.UpdateMetricsHandler(repo))
 	r.Post("/update", handler.UpdateMetricsWithBodyHandler(repo))
 	r.Post("/update/", handler.UpdateMetricsWithBodyHandler(repo))
+	r.Post("/updates", handler.UpdateMetricsBatchHandler(repo))
+	r.Post("/updates/", handler.UpdateMetricsBatchHandler(repo))
 	r.Get("/value/{type}/{name}", handler.GetMetricHandler(repo))
 	r.Post("/value", handler.GetMetricWithBodyHandler(repo))
 	r.Post("/value/", handler.GetMetricWithBodyHandler(repo))

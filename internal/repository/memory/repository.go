@@ -100,6 +100,26 @@ func (s *InMemoryMetricsRepository) ReplaceValue(metric *model.Metrics) error {
 	return nil
 }
 
+func (s *InMemoryMetricsRepository) BatchUpdate(metrics []model.Metrics) error {
+	for i := range metrics {
+		m := metrics[i]
+		m.ID = model.GenerateID(m.MType, m.Name)
+		switch m.MType {
+		case model.Counter:
+			if err := s.IncreaseValue(&m); err != nil {
+				return err
+			}
+		case model.Gauge:
+			if err := s.ReplaceValue(&m); err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("unknown metric type: %s", m.MType)
+		}
+	}
+	return nil
+}
+
 func (s *InMemoryMetricsRepository) GetMetric(id string) (model.Metrics, error) {
 	metric, ok := s.metrics[id]
 	if !ok {

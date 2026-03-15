@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -65,6 +66,48 @@ func SendMetric(serverAddr string, m model.Metrics) error {
 
 	if res.StatusCode != http.StatusOK {
 		return fmt.Errorf("got unexpected status code: %v\n Body: %v", res.StatusCode, body)
+	}
+	return nil
+}
+
+// SendMetricsBatch отправляет батч метрик на /updates/ с gzip-сжатием.
+func SendMetricsBatch(serverAddr string, metrics []model.Metrics) error {
+	if len(metrics) == 0 {
+		return nil
+	}
+
+	url := fmt.Sprintf("http://%s/updates/", serverAddr)
+
+	jsonData, err := json.Marshal(metrics)
+	if err != nil {
+		return fmt.Errorf("failed to marshal json: %w", err)
+	}
+
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+	if _, err := gw.Write(jsonData); err != nil {
+		return fmt.Errorf("failed to compress body: %w", err)
+	}
+	if err := gw.Close(); err != nil {
+		return fmt.Errorf("failed to close gzip writer: %w", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, url, &buf)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Encoding", "gzip")
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send batch: %w", err)
+	}
+	defer res.Body.Close()
+
+	body, _ := io.ReadAll(res.Body)
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("got unexpected status code: %v\n Body: %s", res.StatusCode, body)
 	}
 	return nil
 }

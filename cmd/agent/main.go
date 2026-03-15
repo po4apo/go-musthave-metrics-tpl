@@ -55,11 +55,13 @@ func main() {
 
 		// отправка репорта на сервер
 		if iterationCount >= iterationPerRequest {
+			batch := make([]model.Metrics, 0, len(metricsReport)*len(metricsCollector))
 			for _, mc := range metricsReport {
-				for _, m := range mc {
-					if err := agent.SendMetric(startConf.Addr, m); err != nil {
-						log.Print(err)
-					}
+				batch = append(batch, mc...)
+			}
+			if len(batch) > 0 {
+				if err := agent.SendMetricsBatch(startConf.Addr, batch); err != nil {
+					log.Printf("batch send failed: %v", err)
 				}
 			}
 			metricsReport = make([][]model.Metrics, 0)

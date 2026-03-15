@@ -370,6 +370,80 @@ func TestReplaceErrorValue(t *testing.T) {
 	}
 }
 
+func TestBatchUpdate(t *testing.T) {
+	tests := []struct {
+		name        string
+		initState   []model.Metrics
+		batch       []model.Metrics
+		wantMetric  model.Metrics
+		wantDelta   *int64
+		wantValue   *float64
+	}{
+		{
+			name:      "Батч с gauge и counter в пустую таблицу",
+			initState: nil,
+			batch: []model.Metrics{
+				model.NewGaugeMetric("bg1", model.Ptr(1.5)),
+				model.NewCounterMetrics("bc1", model.Ptr(int64(10))),
+			},
+			wantMetric: model.NewCounterMetrics("bc1", model.Ptr(int64(10))),
+			wantDelta:  model.Ptr(int64(10)),
+		},
+		{
+			name: "Counter суммируется с существующим",
+			initState: []model.Metrics{
+				model.NewCounterMetrics("bc2", model.Ptr(int64(5))),
+			},
+			batch: []model.Metrics{
+				model.NewCounterMetrics("bc2", model.Ptr(int64(3))),
+			},
+			wantMetric: model.NewCounterMetrics("bc2", model.Ptr(int64(8))),
+			wantDelta:  model.Ptr(int64(8)),
+		},
+		{
+			name: "Gauge перезаписывается",
+			initState: []model.Metrics{
+				model.NewGaugeMetric("bg2", model.Ptr(1.0)),
+			},
+			batch: []model.Metrics{
+				model.NewGaugeMetric("bg2", model.Ptr(9.9)),
+			},
+			wantMetric: model.NewGaugeMetric("bg2", model.Ptr(9.9)),
+			wantValue:  model.Ptr(9.9),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := createTestR(t)
+
+			if tt.initState != nil {
+				err := r.SetStateFromSlice(&tt.initState)
+				assert.NoError(t, err)
+			}
+
+			err := r.BatchUpdate(tt.batch)
+			assert.NoError(t, err)
+
+			m, err := r.GetMetric(tt.wantMetric.ID)
+			assert.NoError(t, err)
+
+			if tt.wantDelta != nil {
+				assert.Equal(t, *tt.wantDelta, *m.Delta)
+			}
+			if tt.wantValue != nil {
+				assert.InDelta(t, *tt.wantValue, *m.Value, 0.001)
+			}
+		})
+	}
+}
+
+func TestBatchUpdateEmpty(t *testing.T) {
+	r := createTestR(t)
+	err := r.BatchUpdate([]model.Metrics{})
+	assert.NoError(t, err)
+}
+
 // func TestEmpty(t *testing.T) {
 // 	tests := []struct{
 // 		name string

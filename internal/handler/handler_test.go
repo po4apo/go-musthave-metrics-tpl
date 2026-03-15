@@ -355,6 +355,98 @@ func TestGetMetricHandler(t *testing.T) {
 	}
 }
 
+func TestUpdateMetricsBatchHandler(t *testing.T) {
+	const endpoint = "/updates/"
+
+	type Want struct {
+		code int
+	}
+
+	tests := []struct {
+		name string
+		body interface{}
+		want Want
+	}{
+		{
+			name: "Батч gauge и counter",
+			body: []model.Metrics{
+				model.NewGaugeMetric("bg", model.Ptr(1.1)),
+				model.NewCounterMetrics("bc", model.Ptr(int64(5))),
+			},
+			want: Want{code: http.StatusOK},
+		},
+		{
+			name: "Пустой батч",
+			body: []model.Metrics{},
+			want: Want{code: http.StatusOK},
+		},
+		{
+			name: "Невалидный JSON",
+			body: "not-json",
+			want: Want{code: http.StatusBadRequest},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Helper()
+			logger := newLogger()
+			repo, _ := memrepo.NewMemStorage(logger)
+
+			var bodyReader io.Reader
+			switch v := tt.body.(type) {
+			case string:
+				bodyReader = bytes.NewReader([]byte(v))
+			default:
+				bBody, err := json.Marshal(v)
+				assert.NoError(t, err)
+				bodyReader = bytes.NewReader(bBody)
+			}
+
+			res := makeRequest(
+				endpoint,
+				http.MethodPost,
+				endpoint,
+				UpdateMetricsBatchHandler(repo),
+				bodyReader,
+			)
+			defer res.Body.Close()
+
+			assert.Equal(t, tt.want.code, res.StatusCode)
+		})
+	}
+}
+
+func TestUpdateMetricsBatchHandlerVerifyValues(t *testing.T) {
+	logger := newLogger()
+	repo, _ := memrepo.NewMemStorage(logger)
+
+	batch := []model.Metrics{
+		model.NewGaugeMetric("tg", model.Ptr(3.14)),
+		model.NewCounterMetrics("tc", model.Ptr(int64(2))),
+		model.NewCounterMetrics("tc", model.Ptr(int64(3))),
+	}
+	bBody, _ := json.Marshal(batch)
+
+	res := makeRequest(
+		"/updates/",
+		http.MethodPost,
+		"/updates/",
+		UpdateMetricsBatchHandler(repo),
+		bytes.NewReader(bBody),
+	)
+	res.Body.Close()
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+
+	g, err := repo.GetMetric(model.GenerateID(model.Gauge, "tg"))
+	assert.NoError(t, err)
+	assert.InDelta(t, 3.14, *g.Value, 0.001)
+
+	c, err := repo.GetMetric(model.GenerateID(model.Counter, "tc"))
+	assert.NoError(t, err)
+	assert.Equal(t, int64(5), *c.Delta)
+}
+
 func TestViewMetrics(t *testing.T) {
 
 	t.Run(

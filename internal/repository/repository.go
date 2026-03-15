@@ -14,6 +14,7 @@ type MetricsRepository interface {
 	// сеттеры
 	IncreaseValue(*model.Metrics) error
 	ReplaceValue(*model.Metrics) error
+	BatchUpdate([]model.Metrics) error
 
 	//геттеры
 	GetMetric(string) (model.Metrics, error) // по id

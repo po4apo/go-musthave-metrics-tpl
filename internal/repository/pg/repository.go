@@ -195,6 +195,81 @@ func (r *PostgresRepository) ReplaceValue(metric *model.Metrics) error {
 	return nil
 }
 
+const BatchUpdateTimeout = 10 * time.Second
+
+func (r *PostgresRepository) BatchUpdate(metrics []model.Metrics) error {
+	ctx, cancel := context.WithTimeout(r.ctx, BatchUpdateTimeout)
+	defer cancel()
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	tableName := r.tables["metrics"]
+
+	gaugeStmt, err := tx.PrepareContext(ctx,
+		"INSERT INTO "+tableName+" (id, name, type, value) "+
+			"VALUES ($1, $2, $3, $4) ON CONFLICT(id) DO UPDATE SET value = $4")
+	if err != nil {
+		return fmt.Errorf("prepare gauge stmt: %w", err)
+	}
+	defer gaugeStmt.Close()
+
+	counterSelectStmt, err := tx.PrepareContext(ctx,
+		"SELECT delta FROM "+tableName+" WHERE id = $1")
+	if err != nil {
+		return fmt.Errorf("prepare counter select stmt: %w", err)
+	}
+	defer counterSelectStmt.Close()
+
+	counterInsertStmt, err := tx.PrepareContext(ctx,
+		"INSERT INTO "+tableName+" (id, name, type, delta) "+
+			"VALUES ($1, $2, $3, $4) ON CONFLICT(id) DO UPDATE SET delta = $4")
+	if err != nil {
+		return fmt.Errorf("prepare counter insert stmt: %w", err)
+	}
+	defer counterInsertStmt.Close()
+
+	for i := range metrics {
+		m := metrics[i]
+		m.ID = model.GenerateID(m.MType, m.Name)
+
+		switch m.MType {
+		case model.Gauge:
+			if m.Value == nil {
+				return fmt.Errorf("field \"value\" is required for gauge %s", m.Name)
+			}
+			if _, err := gaugeStmt.ExecContext(ctx, m.ID, m.Name, m.MType, *m.Value); err != nil {
+				return fmt.Errorf("upsert gauge %s: %w", m.Name, err)
+			}
+
+		case model.Counter:
+			if m.Delta == nil {
+				return fmt.Errorf("field \"delta\" is required for counter %s", m.Name)
+			}
+			var existingDelta sql.NullInt64
+			err := counterSelectStmt.QueryRowContext(ctx, m.ID).Scan(&existingDelta)
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("select counter %s: %w", m.Name, err)
+			}
+			newDelta := *m.Delta
+			if existingDelta.Valid {
+				newDelta += existingDelta.Int64
+			}
+			if _, err := counterInsertStmt.ExecContext(ctx, m.ID, m.Name, m.MType, newDelta); err != nil {
+				return fmt.Errorf("upsert counter %s: %w", m.Name, err)
+			}
+
+		default:
+			return fmt.Errorf("unknown metric type: %s", m.MType)
+		}
+	}
+
+	return tx.Commit()
+}
+
 func (r *PostgresRepository) GetMetric(id string) (model.Metrics, error) {
 	ctx, cancel := context.WithTimeout(r.ctx, SelectRowTimeout)
 	defer cancel()

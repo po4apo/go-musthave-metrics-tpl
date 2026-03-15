@@ -170,6 +170,41 @@ func UpdateMetricsHandler(repo repository.MetricsRepository) http.HandlerFunc {
 	}
 }
 
+func UpdateMetricsBatchHandler(repo repository.MetricsRepository) http.HandlerFunc {
+	return func(rw http.ResponseWriter, r *http.Request) {
+		rw.Header().Set("Content-Type", "application/json")
+
+		byteBody, err := io.ReadAll(r.Body)
+		if err != nil {
+			rw.WriteHeader(http.StatusBadRequest)
+			rw.Write([]byte(`{"error":"failed to read body"}`))
+			return
+		}
+
+		var metrics []model.Metrics
+		if err := json.Unmarshal(byteBody, &metrics); err != nil {
+			rw.WriteHeader(http.StatusBadRequest)
+			rw.Write([]byte(`{"error":"invalid JSON"}`))
+			return
+		}
+
+		if len(metrics) == 0 {
+			rw.WriteHeader(http.StatusOK)
+			rw.Write([]byte(`{}`))
+			return
+		}
+
+		if err := repo.BatchUpdate(metrics); err != nil {
+			rw.WriteHeader(http.StatusInternalServerError)
+			rw.Write([]byte(`{"error":"` + err.Error() + `"}`))
+			return
+		}
+
+		rw.WriteHeader(http.StatusOK)
+		rw.Write([]byte(`{}`))
+	}
+}
+
 func ViewMetrics(repo repository.MetricsRepository) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		metrics, err := repo.GetAll()
