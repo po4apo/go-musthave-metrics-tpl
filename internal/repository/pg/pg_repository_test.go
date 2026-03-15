@@ -372,12 +372,12 @@ func TestReplaceErrorValue(t *testing.T) {
 
 func TestBatchUpdate(t *testing.T) {
 	tests := []struct {
-		name        string
-		initState   []model.Metrics
-		batch       []model.Metrics
-		wantMetric  model.Metrics
-		wantDelta   *int64
-		wantValue   *float64
+		name       string
+		initState  []model.Metrics
+		batch      []model.Metrics
+		wantMetric model.Metrics
+		wantDelta  *int64
+		wantValue  *float64
 	}{
 		{
 			name:      "Батч с gauge и counter в пустую таблицу",
