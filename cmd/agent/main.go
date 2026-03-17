@@ -1,16 +1,22 @@
 package main
 
 import (
+	"fmt"
 	"math/rand"
 	"time"
 
-	"log"
-
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/agent"
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/model"
+	"go.uber.org/zap"
 )
 
 func main() {
+	logger, err := zap.NewDevelopment()
+
+	if err != nil {
+		panic(fmt.Sprintf("failed to inittialize logger: %w", err))
+	}
+
 	startConf := parseFlags()
 	pollInterval := startConf.PollInterval
 	reportInterval := startConf.ReportInterval
@@ -61,7 +67,7 @@ func main() {
 			}
 			if len(batch) > 0 {
 				if err := agent.SendMetricsBatch(startConf.Addr, batch); err != nil {
-					log.Printf("batch send failed: %v", err)
+					logger.Warn("batch send failed: %v", zap.Error(err))
 				}
 			}
 			metricsReport = make([][]model.Metrics, 0)
