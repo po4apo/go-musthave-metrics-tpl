@@ -2,14 +2,11 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
-
-	"go.uber.org/zap"
-
-	"database/sql"
 
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -17,6 +14,7 @@ import (
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/model"
 	repoerrors "github.com/po4apo/go-musthave-metrics-tpl/internal/repository/errors"
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/retry"
+	"go.uber.org/zap"
 )
 
 const (
@@ -24,15 +22,31 @@ const (
 	SelectRowTimeout     = 5 * time.Second
 	IncreaseValueTimeout = 5 * time.Second
 	ReplaceValueTimeout  = 5 * time.Second
+	BatchUpdateTimeout   = 10 * time.Second
 )
 
-// isPgConnError возвращает true, если ошибка относится к Class 08 — Connection Exception.
-func isPgConnError(err error) bool {
+// isPgRetriable определяет, стоит ли повторять запрос при данной PG-ошибке.
+// Retriable: Class 08 (Connection Exception), 40001 (serialization_failure),
+// 40P01 (deadlock_detected), 57P01 (admin_shutdown), 53300 (too_many_connections).
+func isPgRetriable(err error) bool {
 	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
-		return pgerrcode.IsConnectionException(pgErr.Code)
+	if !errors.As(err, &pgErr) {
+		return false
 	}
-	return false
+	switch {
+	case pgerrcode.IsConnectionException(pgErr.Code):
+		return true
+	case pgErr.Code == pgerrcode.SerializationFailure:
+		return true
+	case pgErr.Code == pgerrcode.DeadlockDetected:
+		return true
+	case pgErr.Code == pgerrcode.AdminShutdown:
+		return true
+	case pgErr.Code == pgerrcode.TooManyConnections:
+		return true
+	default:
+		return false
+	}
 }
 
 type PostgresRepository struct {
@@ -40,6 +54,26 @@ type PostgresRepository struct {
 	logger *zap.Logger
 	ctx    context.Context
 	tables map[string]string
+}
+
+func (r *PostgresRepository) retryTx(ctx context.Context, fn func(tx *sql.Tx) error) error {
+	return retry.Do(func() error {
+		tx, err := r.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+
+		if err := fn(tx); err != nil {
+			return err
+		}
+		return tx.Commit()
+	}, isPgRetriable)
+}
+
+// retryQuery выполняет read-only операцию (без транзакции) с retry при retriable PG-ошибках.
+func (r *PostgresRepository) retryQuery(fn func() error) error {
+	return retry.Do(fn, isPgRetriable)
 }
 
 func (r PostgresRepository) changeTable(key, value string) error {
@@ -149,15 +183,10 @@ func (r *PostgresRepository) IncreaseValue(metric *model.Metrics) error {
 		return fmt.Errorf("field \"Delta\" is not define: %w", repoerrors.ErrFieldUndefine)
 	}
 
-	return retry.Do(func() error {
-		ctx, cancel := context.WithTimeout(r.ctx, IncreaseValueTimeout)
-		defer cancel()
-		tx, err := r.db.BeginTx(ctx, nil)
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
+	ctx, cancel := context.WithTimeout(r.ctx, IncreaseValueTimeout)
+	defer cancel()
 
+	return r.retryTx(ctx, func(tx *sql.Tx) error {
 		var m model.Metrics
 		row := tx.QueryRow("SELECT id, name, type, value, delta from "+r.tables["metrics"]+
 			" WHERE id=$1;", metric.ID)
@@ -165,19 +194,15 @@ func (r *PostgresRepository) IncreaseValue(metric *model.Metrics) error {
 			if errors.Is(err, sql.ErrNoRows) {
 				query := "INSERT INTO " + r.tables["metrics"] + " (id, name, type, value, delta) " +
 					"VALUES ($1, $2, $3, $4, $5)"
-				if _, err := tx.Exec(query, metric.ID, metric.Name, metric.MType, nil, *metric.Delta); err != nil {
-					return err
-				}
-				return tx.Commit()
+				_, err := tx.Exec(query, metric.ID, metric.Name, metric.MType, nil, *metric.Delta)
+				return err
 			}
 			return err
 		}
 		newDelta := *m.Delta + *metric.Delta
-		if _, err = tx.Exec("UPDATE "+r.tables["metrics"]+" SET delta=$1 WHERE id=$2", newDelta, m.ID); err != nil {
-			return err
-		}
-		return tx.Commit()
-	}, isPgConnError)
+		_, err := tx.Exec("UPDATE "+r.tables["metrics"]+" SET delta=$1 WHERE id=$2", newDelta, m.ID)
+		return err
+	})
 }
 
 func (r *PostgresRepository) ReplaceValue(metric *model.Metrics) error {
@@ -189,105 +214,113 @@ func (r *PostgresRepository) ReplaceValue(metric *model.Metrics) error {
 		return fmt.Errorf("field \"Value\" is not define: %w", repoerrors.ErrFieldUndefine)
 	}
 
-	return retry.Do(func() error {
-		ctx, cancel := context.WithTimeout(r.ctx, ReplaceValueTimeout)
-		defer cancel()
-		tx, err := r.db.BeginTx(ctx, nil)
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
+	ctx, cancel := context.WithTimeout(r.ctx, ReplaceValueTimeout)
+	defer cancel()
 
+	return r.retryTx(ctx, func(tx *sql.Tx) error {
 		query := "insert into " + r.tables["metrics"] + " (id, name, type, value)" +
 			"values ($1, $2, $3, $4) on conflict(id) do update set value=$4;"
-
-		if _, err = tx.Exec(query, metric.ID, metric.Name, metric.MType, *metric.Value); err != nil {
-			return err
-		}
-		return tx.Commit()
-	}, isPgConnError)
+		_, err := tx.Exec(query, metric.ID, metric.Name, metric.MType, *metric.Value)
+		return err
+	})
 }
 
-const BatchUpdateTimeout = 10 * time.Second
-
 func (r *PostgresRepository) BatchUpdate(metrics []model.Metrics) error {
-	return retry.Do(func() error {
-		ctx, cancel := context.WithTimeout(r.ctx, BatchUpdateTimeout)
-		defer cancel()
+	type gaugeRow struct {
+		id, name, mtype string
+		value           float64
+	}
+	type counterRow struct {
+		id, name, mtype string
+		delta           int64
+	}
 
-		tx, err := r.db.BeginTx(ctx, nil)
-		if err != nil {
-			return fmt.Errorf("begin tx: %w", err)
+	// Предагрегация: gauge — последнее значение, counter — сумма дельт.
+	// Порядок по ID гарантирует уникальность строк, чтобы INSERT ... ON CONFLICT
+	// не получил дубликаты в одном VALUES (PostgreSQL запрещает это).
+	gauges := make(map[string]gaugeRow)
+	counters := make(map[string]counterRow)
+
+	for i := range metrics {
+		m := metrics[i]
+		m.ID = model.GenerateID(m.MType, m.Name)
+
+		switch m.MType {
+		case model.Gauge:
+			if m.Value == nil {
+				return fmt.Errorf("field \"value\" is required for gauge %s", m.Name)
+			}
+			gauges[m.ID] = gaugeRow{id: m.ID, name: m.Name, mtype: m.MType, value: *m.Value}
+
+		case model.Counter:
+			if m.Delta == nil {
+				return fmt.Errorf("field \"delta\" is required for counter %s", m.Name)
+			}
+			existing := counters[m.ID]
+			existing.id = m.ID
+			existing.name = m.Name
+			existing.mtype = m.MType
+			existing.delta += *m.Delta
+			counters[m.ID] = existing
+
+		default:
+			return fmt.Errorf("unknown metric type: %s", m.MType)
 		}
-		defer tx.Rollback()
+	}
 
+	ctx, cancel := context.WithTimeout(r.ctx, BatchUpdateTimeout)
+	defer cancel()
+
+	return r.retryTx(ctx, func(tx *sql.Tx) error {
 		tableName := r.tables["metrics"]
 
-		gaugeStmt, err := tx.PrepareContext(ctx,
-			"INSERT INTO "+tableName+" (id, name, type, value) "+
-				"VALUES ($1, $2, $3, $4) ON CONFLICT(id) DO UPDATE SET value = $4")
-		if err != nil {
-			return fmt.Errorf("prepare gauge stmt: %w", err)
-		}
-		defer gaugeStmt.Close()
-
-		counterSelectStmt, err := tx.PrepareContext(ctx,
-			"SELECT delta FROM "+tableName+" WHERE id = $1")
-		if err != nil {
-			return fmt.Errorf("prepare counter select stmt: %w", err)
-		}
-		defer counterSelectStmt.Close()
-
-		counterInsertStmt, err := tx.PrepareContext(ctx,
-			"INSERT INTO "+tableName+" (id, name, type, delta) "+
-				"VALUES ($1, $2, $3, $4) ON CONFLICT(id) DO UPDATE SET delta = $4")
-		if err != nil {
-			return fmt.Errorf("prepare counter insert stmt: %w", err)
-		}
-		defer counterInsertStmt.Close()
-
-		for i := range metrics {
-			m := metrics[i]
-			m.ID = model.GenerateID(m.MType, m.Name)
-
-			switch m.MType {
-			case model.Gauge:
-				if m.Value == nil {
-					return fmt.Errorf("field \"value\" is required for gauge %s", m.Name)
+		if len(gauges) > 0 {
+			query := "INSERT INTO " + tableName + " (id, name, type, value) VALUES "
+			args := make([]interface{}, 0, len(gauges)*4)
+			i := 0
+			for _, g := range gauges {
+				if i > 0 {
+					query += ", "
 				}
-				if _, err := gaugeStmt.ExecContext(ctx, m.ID, m.Name, m.MType, *m.Value); err != nil {
-					return fmt.Errorf("upsert gauge %s: %w", m.Name, err)
-				}
+				base := i * 4
+				query += fmt.Sprintf("($%d, $%d, $%d, $%d)", base+1, base+2, base+3, base+4)
+				args = append(args, g.id, g.name, g.mtype, g.value)
+				i++
+			}
+			query += " ON CONFLICT(id) DO UPDATE SET value = EXCLUDED.value"
 
-			case model.Counter:
-				if m.Delta == nil {
-					return fmt.Errorf("field \"delta\" is required for counter %s", m.Name)
-				}
-				var existingDelta sql.NullInt64
-				err := counterSelectStmt.QueryRowContext(ctx, m.ID).Scan(&existingDelta)
-				if err != nil && !errors.Is(err, sql.ErrNoRows) {
-					return fmt.Errorf("select counter %s: %w", m.Name, err)
-				}
-				newDelta := *m.Delta
-				if existingDelta.Valid {
-					newDelta += existingDelta.Int64
-				}
-				if _, err := counterInsertStmt.ExecContext(ctx, m.ID, m.Name, m.MType, newDelta); err != nil {
-					return fmt.Errorf("upsert counter %s: %w", m.Name, err)
-				}
-
-			default:
-				return fmt.Errorf("unknown metric type: %s", m.MType)
+			if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+				return fmt.Errorf("batch upsert gauges: %w", err)
 			}
 		}
 
-		return tx.Commit()
-	}, isPgConnError)
+		if len(counters) > 0 {
+			query := "INSERT INTO " + tableName + " (id, name, type, delta) VALUES "
+			args := make([]interface{}, 0, len(counters)*4)
+			i := 0
+			for _, c := range counters {
+				if i > 0 {
+					query += ", "
+				}
+				base := i * 4
+				query += fmt.Sprintf("($%d, $%d, $%d, $%d)", base+1, base+2, base+3, base+4)
+				args = append(args, c.id, c.name, c.mtype, c.delta)
+				i++
+			}
+			query += " ON CONFLICT(id) DO UPDATE SET delta = COALESCE(" + tableName + ".delta, 0) + EXCLUDED.delta"
+
+			if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+				return fmt.Errorf("batch upsert counters: %w", err)
+			}
+		}
+
+		return nil
+	})
 }
 
 func (r *PostgresRepository) GetMetric(id string) (model.Metrics, error) {
 	var m model.Metrics
-	err := retry.Do(func() error {
+	err := r.retryQuery(func() error {
 		ctx, cancel := context.WithTimeout(r.ctx, SelectRowTimeout)
 		defer cancel()
 
@@ -302,14 +335,14 @@ func (r *PostgresRepository) GetMetric(id string) (model.Metrics, error) {
 			return err
 		}
 		return nil
-	}, isPgConnError)
+	})
 
 	return m, err
 }
 
 func (r *PostgresRepository) GetAll() ([]model.Metrics, error) {
 	var result []model.Metrics
-	err := retry.Do(func() error {
+	err := r.retryQuery(func() error {
 		ctx, cancel := context.WithTimeout(r.ctx, SelectRowTimeout)
 		defer cancel()
 
@@ -332,7 +365,7 @@ func (r *PostgresRepository) GetAll() ([]model.Metrics, error) {
 		}
 		result = metrics
 		return nil
-	}, isPgConnError)
+	})
 
 	if err != nil {
 		return []model.Metrics{}, err

@@ -14,7 +14,7 @@ func main() {
 	logger, err := zap.NewDevelopment()
 
 	if err != nil {
-		panic(fmt.Sprintf("failed to inittialize logger: %w", err))
+		panic(fmt.Sprintf("failed to inittialize logger: %v", err))
 	}
 
 	startConf := parseFlags()
