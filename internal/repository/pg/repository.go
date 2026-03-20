@@ -12,7 +12,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
@@ -25,14 +24,6 @@ import (
 	"go.uber.org/zap"
 
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-)
-
-const (
-	InsertRowTimeout     = 5 * time.Second
-	SelectRowTimeout     = 5 * time.Second
-	IncreaseValueTimeout = 5 * time.Second
-	ReplaceValueTimeout  = 5 * time.Second
-	BatchUpdateTimeout   = 10 * time.Second
 )
 
 // isPgRetriable определяет, стоит ли повторять запрос при данной PG-ошибке.
@@ -240,10 +231,10 @@ func NewPostgresStorage(ctx context.Context, logger *zap.Logger, databaseDsn str
 
 	db, err := sql.Open("pgx", databaseDsn)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open db connection: %w", err)
 	}
 
-	ctxP, cancel := context.WithTimeout(ctx, 5*time.Second)
+	ctxP, cancel := context.WithCancel(ctx)
 	defer cancel()
 	err = db.PingContext(ctxP)
 	if err != nil {
@@ -268,7 +259,7 @@ func (r *PostgresRepository) SetStateFromSlice(state *[]model.Metrics) error {
 		"VALUES ($1, $2, $3, $4, $5)"
 
 	for _, m := range *state {
-		ctx, cancel := context.WithTimeout(r.ctx, InsertRowTimeout)
+		ctx, cancel := context.WithCancel(r.ctx)
 		defer cancel()
 		var value sql.NullFloat64
 		if m.Value != nil {
@@ -310,7 +301,7 @@ func (r *PostgresRepository) IncreaseValue(metric *model.Metrics) error {
 		return fmt.Errorf("field \"Delta\" is not define: %w", repoerrors.ErrFieldUndefine)
 	}
 
-	ctx, cancel := context.WithTimeout(r.ctx, IncreaseValueTimeout)
+	ctx, cancel := context.WithCancel(r.ctx)
 	defer cancel()
 
 	return r.retryTx(ctx, func(tx *sql.Tx) error {
@@ -341,7 +332,7 @@ func (r *PostgresRepository) ReplaceValue(metric *model.Metrics) error {
 		return fmt.Errorf("field \"Value\" is not define: %w", repoerrors.ErrFieldUndefine)
 	}
 
-	ctx, cancel := context.WithTimeout(r.ctx, ReplaceValueTimeout)
+	ctx, cancel := context.WithCancel(r.ctx)
 	defer cancel()
 
 	return r.retryTx(ctx, func(tx *sql.Tx) error {
@@ -395,7 +386,7 @@ func (r *PostgresRepository) BatchUpdate(metrics []model.Metrics) error {
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(r.ctx, BatchUpdateTimeout)
+	ctx, cancel := context.WithCancel(r.ctx)
 	defer cancel()
 
 	return r.retryTx(ctx, func(tx *sql.Tx) error {
@@ -448,7 +439,7 @@ func (r *PostgresRepository) BatchUpdate(metrics []model.Metrics) error {
 func (r *PostgresRepository) GetMetric(id string) (model.Metrics, error) {
 	var m model.Metrics
 	err := r.retryQuery(func() error {
-		ctx, cancel := context.WithTimeout(r.ctx, SelectRowTimeout)
+		ctx, cancel := context.WithCancel(r.ctx)
 		defer cancel()
 
 		query := "SELECT id, name, type, value, delta from " + r.tables["metrics"] +
@@ -470,7 +461,7 @@ func (r *PostgresRepository) GetMetric(id string) (model.Metrics, error) {
 func (r *PostgresRepository) GetAll() ([]model.Metrics, error) {
 	var result []model.Metrics
 	err := r.retryQuery(func() error {
-		ctx, cancel := context.WithTimeout(r.ctx, SelectRowTimeout)
+		ctx, cancel := context.WithCancel(r.ctx)
 		defer cancel()
 
 		rows, err := r.db.QueryContext(ctx, "SELECT * FROM "+r.tables["metrics"])
@@ -501,7 +492,7 @@ func (r *PostgresRepository) GetAll() ([]model.Metrics, error) {
 }
 
 func (r *PostgresRepository) Ping() error {
-	ctx, canel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, canel := context.WithCancel(r.ctx)
 	defer canel()
 	return r.db.PingContext(ctx)
 }
