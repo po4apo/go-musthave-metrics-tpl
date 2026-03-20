@@ -24,15 +24,15 @@ var (
 )
 
 type Handler struct {
-	repo   *repository.MetricsRepository
+	repo   repository.MetricsRepository
 	logger *zap.Logger
 }
 
-func NewHandler(repo *repository.MetricsRepository, logger *zap.Logger) *Handler {
+func NewHandler(repo repository.MetricsRepository, logger *zap.Logger) (*Handler, error) {
 	return &Handler{
 		repo:   repo,
 		logger: logger,
-	}
+	}, nil
 }
 func validateUpdateMetrics(
 	mType string,
@@ -94,7 +94,7 @@ func validateUpdateMetricsBody(rawBody io.ReadCloser) (model.Metrics, error) {
 
 }
 
-func UpdateMetricsWithBodyHandler(repo repository.MetricsRepository) http.HandlerFunc {
+func (h *Handler) UpdateMetricsWithBodyHandler() http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		metrics, err := validateUpdateMetricsBody(r.Body)
@@ -105,7 +105,7 @@ func UpdateMetricsWithBodyHandler(repo repository.MetricsRepository) http.Handle
 		}
 
 		if metrics.MType == model.Counter {
-			if err = repo.IncreaseValue(&metrics); err == nil {
+			if err = h.repo.IncreaseValue(&metrics); err == nil {
 				rw.WriteHeader(http.StatusOK)
 				rw.Write([]byte("Counter increased!"))
 				return
@@ -113,7 +113,7 @@ func UpdateMetricsWithBodyHandler(repo repository.MetricsRepository) http.Handle
 		}
 
 		if metrics.MType == model.Gauge {
-			if err = repo.ReplaceValue(&metrics); err == nil {
+			if err = h.repo.ReplaceValue(&metrics); err == nil {
 				rw.WriteHeader(http.StatusOK)
 				rw.Write([]byte("Gauge repalced!"))
 				return
@@ -121,13 +121,14 @@ func UpdateMetricsWithBodyHandler(repo repository.MetricsRepository) http.Handle
 		}
 
 		rw.WriteHeader(http.StatusInternalServerError)
+		h.logger.Error("Unexpected internal server error", zap.Error(err))
 		rw.Write([]byte("Unexpected error! Contact support"))
 	}
 }
 
 // обрабатывает запросы типа
 // http://<АДРЕС_СЕРВЕРА>/update/<ТИП_МЕТРИКИ>/<ИМЯ_МЕТРИКИ>/<ЗНАЧЕНИЕ_МЕТРИКИ>
-func UpdateMetricsHandler(repo repository.MetricsRepository) http.HandlerFunc {
+func (h *Handler) UpdateMetricsHandler(repo repository.MetricsRepository) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		var metric model.Metrics
 
@@ -166,11 +167,12 @@ func UpdateMetricsHandler(repo repository.MetricsRepository) http.HandlerFunc {
 		}
 
 		rw.WriteHeader(http.StatusInternalServerError)
+		h.logger.Error("Unexpected internal server error", zap.Any("metric", metric))
 		rw.Write([]byte("Unexpected error! Contact support"))
 	}
 }
 
-func UpdateMetricsBatchHandler(repo repository.MetricsRepository) http.HandlerFunc {
+func (h *Handler) UpdateMetricsBatchHandler(repo repository.MetricsRepository) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		rw.Header().Set("Content-Type", "application/json")
 
@@ -196,7 +198,7 @@ func UpdateMetricsBatchHandler(repo repository.MetricsRepository) http.HandlerFu
 
 		if err := repo.BatchUpdate(metrics); err != nil {
 			rw.WriteHeader(http.StatusInternalServerError)
-			rw.Write([]byte(`{"error":"` + err.Error() + `"}`))
+			h.logger.Error("Unexpected internal server error", zap.Error(err))
 			return
 		}
 
@@ -205,11 +207,12 @@ func UpdateMetricsBatchHandler(repo repository.MetricsRepository) http.HandlerFu
 	}
 }
 
-func ViewMetrics(repo repository.MetricsRepository) http.HandlerFunc {
+func (h *Handler) ViewMetrics(repo repository.MetricsRepository) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		metrics, err := repo.GetAll()
 		if err != nil {
 			rw.WriteHeader(http.StatusInternalServerError)
+			h.logger.Error("Unexpected internal server error", zap.Error(err))
 			return
 		}
 
@@ -247,7 +250,7 @@ func ViewMetrics(repo repository.MetricsRepository) http.HandlerFunc {
 	}
 }
 
-func GetMetricHandler(repo repository.MetricsRepository) http.HandlerFunc {
+func (h *Handler) GetMetricHandler(repo repository.MetricsRepository) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		mType := chi.URLParam(r, "type")
 		name := chi.URLParam(r, "name")
@@ -274,14 +277,14 @@ func GetMetricHandler(repo repository.MetricsRepository) http.HandlerFunc {
 }
 
 // Позже repository.PostgresRepository заменить на интерфейс
-func PingDBHandler(repo repository.MetricsRepository) http.HandlerFunc {
+func (h *Handler) PingDBHandler(repo repository.MetricsRepository) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
 
 		err := repo.Ping()
 		if err != nil {
 			rw.WriteHeader(http.StatusInternalServerError)
-			rw.Write([]byte("Internal Error"))
+			h.logger.Error("Unexpected internal server error", zap.Error(err))
 			return
 		}
 		rw.WriteHeader(http.StatusOK)
@@ -306,7 +309,7 @@ type valueRequest struct {
 
 // GetMetricWithBodyHandler обрабатывает POST /value с JSON телом {"id":"...","type":"..."} или {"name":"...","type":"..."}.
 // На входе id воспринимается как name (имя метрики для поиска).
-func GetMetricWithBodyHandler(repo repository.MetricsRepository) http.HandlerFunc {
+func (h *Handler) GetMetricWithBodyHandler(repo repository.MetricsRepository) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		var req valueRequest
 		byteBody, err := io.ReadAll(r.Body)
@@ -335,6 +338,7 @@ func GetMetricWithBodyHandler(repo repository.MetricsRepository) http.HandlerFun
 		}
 		if err != nil {
 			rw.WriteHeader(http.StatusInternalServerError)
+			h.logger.Error("Unexpected internal server error", zap.Error(err))
 			return
 		}
 		resp := metricValueResponse{

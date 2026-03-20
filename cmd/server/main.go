@@ -39,12 +39,12 @@ func run(config startConig) error {
 
 	logger.Info("Server starting", zap.String("addr", config.Addr))
 	if config.DatabaseDsn != "" {
-		repo, err = pgrepo.NewPostgresStorage(ctx, logger, config.DatabaseDsn)
+		repo, err = pgrepo.NewPostgresStorage(ctx, logger.With(zap.String("component", "PostgresStorage")), config.DatabaseDsn)
 		if err != nil {
 			return fmt.Errorf("failed to inittialize pg storage: %w", err)
 		}
 	} else {
-		repo, err = memrepo.NewMemStorage(logger)
+		repo, err = memrepo.NewMemStorage(logger.With(zap.String("component", "MemStorage")))
 		if err != nil {
 			return fmt.Errorf("failed to inittialize storage: %w", err)
 		}
@@ -67,21 +67,23 @@ func run(config startConig) error {
 		}
 	}
 
+	h, err := handler.NewHandler(repo, logger.With(zap.String("component", "Handler")))
+
 	r := chi.NewRouter()
-	r.Use(internalMiddleware.CustomLogger(logger))
+	r.Use(internalMiddleware.CustomLogger(logger.With(zap.String("component", "httpLogger"))))
 	r.Use(internalMiddleware.CompressGzip())
 	r.Use(middleware.Timeout(30 * time.Second))
 
-	r.Get("/", handler.ViewMetrics(repo))
-	r.Get("/ping", handler.PingDBHandler(repo))
-	r.Post("/update/{type}/{name}/{value}", handler.UpdateMetricsHandler(repo))
-	r.Post("/update", handler.UpdateMetricsWithBodyHandler(repo))
-	r.Post("/update/", handler.UpdateMetricsWithBodyHandler(repo))
-	r.Post("/updates", handler.UpdateMetricsBatchHandler(repo))
-	r.Post("/updates/", handler.UpdateMetricsBatchHandler(repo))
-	r.Get("/value/{type}/{name}", handler.GetMetricHandler(repo))
-	r.Post("/value", handler.GetMetricWithBodyHandler(repo))
-	r.Post("/value/", handler.GetMetricWithBodyHandler(repo))
+	r.Get("/", h.ViewMetrics(repo))
+	r.Get("/ping", h.PingDBHandler(repo))
+	r.Post("/update/{type}/{name}/{value}", h.UpdateMetricsHandler(repo))
+	r.Post("/update", h.UpdateMetricsWithBodyHandler())
+	r.Post("/update/", h.UpdateMetricsWithBodyHandler())
+	r.Post("/updates", h.UpdateMetricsBatchHandler(repo))
+	r.Post("/updates/", h.UpdateMetricsBatchHandler(repo))
+	r.Get("/value/{type}/{name}", h.GetMetricHandler(repo))
+	r.Post("/value", h.GetMetricWithBodyHandler(repo))
+	r.Post("/value/", h.GetMetricWithBodyHandler(repo))
 
 	if err = http.ListenAndServe(config.Addr, r); err != nil {
 		return fmt.Errorf("failed to start server: %w", err)

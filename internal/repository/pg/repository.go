@@ -105,7 +105,6 @@ func NewPostgresStorage(ctx context.Context, logger *zap.Logger, databaseDsn str
 	tables := make(map[string]string, 128)
 	tables["metrics"] = "metrics"
 
-	logger = logger.With(zap.String("component", "PostgresStorage"))
 	logger.Info(
 		"Create db connection",
 		zap.String("databaseDsn", databaseDsn),

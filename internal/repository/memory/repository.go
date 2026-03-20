@@ -17,13 +17,12 @@ type InMemoryMetricsRepository struct {
 func NewMemStorage(logger *zap.Logger) (*InMemoryMetricsRepository, error) {
 	// размер не будем устанавливать через конфиг, так как это временное решение
 	// в дальнейшем будет полноценная БД
-	l := logger.With(zap.String("component", "MemStorage"))
-	l.Info(
+	logger.Info(
 		"Create mem storage",
 	)
 	return &InMemoryMetricsRepository{
 		metrics: make(map[string]model.Metrics, 128),
-		logger:  l,
+		logger:  logger,
 	}, nil
 }
 

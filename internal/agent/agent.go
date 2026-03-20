@@ -71,7 +71,10 @@ func SendMetric(serverAddr string, m model.Metrics) error {
 	}
 	defer res.Body.Close()
 
-	body, _ := io.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return err
+	}
 	if res.StatusCode != http.StatusOK {
 		return fmt.Errorf("got unexpected status code: %v\n Body: %v", res.StatusCode, body)
 	}
@@ -112,7 +115,10 @@ func SendMetricsBatch(serverAddr string, metrics []model.Metrics) error {
 	}
 	defer res.Body.Close()
 
-	body, _ := io.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return err
+	}
 	if res.StatusCode != http.StatusOK {
 		return fmt.Errorf("got unexpected status code: %v\n Body: %s", res.StatusCode, body)
 	}
