@@ -6,8 +6,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -15,6 +23,8 @@ import (
 	repoerrors "github.com/po4apo/go-musthave-metrics-tpl/internal/repository/errors"
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/retry"
 	"go.uber.org/zap"
+
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 const (
@@ -87,7 +97,7 @@ func (r PostgresRepository) changeTable(key, value string) error {
 func (r PostgresRepository) createMetricsTable(ctx context.Context) error {
 	tableName, ok := r.tables["metrics"]
 	if !ok {
-		return fmt.Errorf("table metrics doesn't exist")
+		return errors.New("table metrics doesn't exist")
 	}
 
 	query := "CREATE TABLE IF NOT EXISTS " + tableName + " " +
@@ -99,6 +109,125 @@ func (r PostgresRepository) createMetricsTable(ctx context.Context) error {
 
 	_, err := r.db.ExecContext(ctx, query)
 	return err
+}
+
+func resolveMigrationsPath() (string, error) {
+	// Надежнее определять путь относительно файла, а не относительно текущей директории.
+	_, file, _, ok := runtime.Caller(0)
+	if ok {
+		candidate := filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations")
+		if st, err := os.Stat(candidate); err == nil && st.IsDir() {
+			return candidate, nil
+		}
+	}
+
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("resolve migrations path: %w", err)
+	}
+
+	candidate := filepath.Join(wd, "migrations")
+	if st, err := os.Stat(candidate); err == nil && st.IsDir() {
+		return candidate, nil
+	}
+
+	return "", fmt.Errorf("migrations directory not found")
+}
+
+func latestUpMigrationVersion(migrationsPath string) (uint, error) {
+	entries, err := os.ReadDir(migrationsPath)
+	if err != nil {
+		return 0, fmt.Errorf("read migrations dir: %w", err)
+	}
+
+	var max uint
+	for _, e := range entries {
+		name := e.Name()
+		if !strings.HasSuffix(name, ".up.sql") {
+			continue
+		}
+
+		// Ожидаемый формат: 000001_metrics.up.sql
+		base := strings.TrimSuffix(name, ".up.sql")
+		parts := strings.SplitN(base, "_", 2)
+		if len(parts) == 0 {
+			continue
+		}
+
+		v, err := strconv.ParseUint(parts[0], 10, 64)
+		if err != nil {
+			continue
+		}
+		if v > uint64(max) {
+			max = uint(v)
+		}
+	}
+
+	return max, nil
+}
+
+func runMigrations(ctx context.Context, db *sql.DB, logger *zap.Logger) error {
+	// ctx сейчас не используется напрямую библиотекой migrate, но оставляем
+	// сигнатуру для возможных будущих изменений/логирования.
+	_ = ctx
+
+	migrationsPath, err := resolveMigrationsPath()
+	if err != nil {
+		return err
+	}
+
+	driver, err := postgres.WithInstance(db, &postgres.Config{})
+	if err != nil {
+		return fmt.Errorf("init postgres migrate driver: %w", err)
+	}
+
+	u := url.URL{Scheme: "file", Path: migrationsPath}
+	sourceURL := u.String()
+
+	m, err := migrate.NewWithDatabaseInstance(sourceURL, "postgres", driver)
+	if err != nil {
+		return fmt.Errorf("init migrate: %w", err)
+	}
+
+	current, dirty, err := m.Version()
+	if errors.Is(err, migrate.ErrNilVersion) {
+		current = 0
+		dirty = false
+	} else if err != nil {
+		return fmt.Errorf("read migration version: %w", err)
+	}
+
+	if dirty {
+		return fmt.Errorf("database migration is dirty at version %d", current)
+	}
+
+	latest, err := latestUpMigrationVersion(migrationsPath)
+	if err != nil {
+		return fmt.Errorf("detect latest migration version: %w", err)
+	}
+	if latest == 0 {
+		// На практике тут не должно быть, но пусть будет безопасно.
+		logger.Info("No up migrations found; skip migrate", zap.String("migrationsPath", migrationsPath))
+		return nil
+	}
+
+	if current >= latest {
+		logger.Debug(
+			"Database migrations are up to date",
+			zap.Uint("version", current),
+			zap.String("migrationsPath", migrationsPath),
+		)
+		return nil
+	}
+
+	if err := m.Up(); err != nil {
+		if errors.Is(err, migrate.ErrNoChange) {
+			return nil
+		}
+		return fmt.Errorf("apply migrations: %w", err)
+	}
+
+	return nil
 }
 
 func NewPostgresStorage(ctx context.Context, logger *zap.Logger, databaseDsn string) (*PostgresRepository, error) {
@@ -127,8 +256,9 @@ func NewPostgresStorage(ctx context.Context, logger *zap.Logger, databaseDsn str
 	)
 	repo := &PostgresRepository{db, logger, ctx, tables}
 
-	if err := repo.createMetricsTable(ctx); err != nil {
-		return nil, fmt.Errorf("failed to create metrics table: %w", err)
+	if err := runMigrations(ctx, db, logger); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("failed to run db migrations: %w", err)
 	}
 
 	return repo, nil
