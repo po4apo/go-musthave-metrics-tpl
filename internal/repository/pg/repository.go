@@ -236,7 +236,6 @@ func NewPostgresStorage(ctx context.Context, logger *zap.Logger, databaseDsn str
 
 	logger.Info(
 		"Create db connection",
-		zap.String("databaseDsn", databaseDsn),
 	)
 
 	db, err := sql.Open("pgx", databaseDsn)
@@ -252,7 +251,6 @@ func NewPostgresStorage(ctx context.Context, logger *zap.Logger, databaseDsn str
 	}
 	logger.Info(
 		"Db connection inizialized",
-		zap.String("databaseDsn", databaseDsn),
 	)
 	repo := &PostgresRepository{db, logger, ctx, tables}
 
