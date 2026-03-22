@@ -70,8 +70,8 @@ func run(config startConig) error {
 	h, err := handler.NewHandler(repo, logger.With(zap.String("component", "Handler")))
 
 	r := chi.NewRouter()
-	r.Use(internalMiddleware.CustomLogger(logger.With(zap.String("component", "httpLogger"))))
 	r.Use(internalMiddleware.CompressGzip())
+	r.Use(internalMiddleware.CustomLogger(logger.With(zap.String("component", "httpLogger"))))
 	r.Use(middleware.Timeout(30 * time.Second))
 
 	r.Get("/", h.ViewMetrics(repo))
