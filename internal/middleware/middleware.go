@@ -47,9 +47,9 @@ func CustomLogger(logger *zap.Logger) func(http.Handler) http.Handler {
 
 			// Логирование body для методов с телом
 			var bodyLog string
-			if r.Body != nil && (method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch) {
-				const maxBodySize = 10 * 1024 // 10KB
-				bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, maxBodySize))
+		if r.Body != nil && (method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch) {
+			const maxBodySize = 1 * 1024 * 1024 // 1MB
+			bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, maxBodySize))
 				if err == nil {
 					bodyLog = string(bodyBytes)
 					// Восстанавливаем body для следующего обработчика
