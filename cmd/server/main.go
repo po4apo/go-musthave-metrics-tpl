@@ -14,6 +14,7 @@ import (
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/repository"
 	memrepo "github.com/po4apo/go-musthave-metrics-tpl/internal/repository/memory"
 	pgrepo "github.com/po4apo/go-musthave-metrics-tpl/internal/repository/pg"
+	"github.com/po4apo/go-musthave-metrics-tpl/internal/utils/hasher"
 	"go.uber.org/zap"
 )
 
@@ -68,9 +69,17 @@ func run(config startConig) error {
 	}
 
 	h, err := handler.NewHandler(repo, logger.With(zap.String("component", "Handler")))
+	if err != nil {
+		return fmt.Errorf("failed to inittialize handler %w", err)
+	}
+
+	_hasher, err := hasher.NewHasher(*logger.With(zap.String("component", "Hasher")), config.Key)
 
 	r := chi.NewRouter()
 	r.Use(internalMiddleware.CompressGzip())
+	if _hasher.Enabled() {
+		r.Use(internalMiddleware.CheckSign(_hasher, *logger.With(zap.String("component", "CheckSign"))))
+	}
 	r.Use(internalMiddleware.CustomLogger(logger.With(zap.String("component", "httpLogger"))))
 	r.Use(middleware.Timeout(30 * time.Second))
 

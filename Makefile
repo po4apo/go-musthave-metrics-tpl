@@ -1,9 +1,9 @@
 .PHONY: run-server run-agent build test fmt vet check
 
 run-server:
-	go run ./cmd/server
+	go run ./cmd/server -key 1234
 run-agent:
-	go run ./cmd/agent -r 2 -p 1
+	go run ./cmd/agent -r 2 -p 1 -key 12345
 build:
 	go build ./...
 

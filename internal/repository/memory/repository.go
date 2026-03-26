@@ -62,8 +62,6 @@ func (s *InMemoryMetricsRepository) IncreaseValue(metric *model.Metrics) error {
 		zap.String("name", v.Name),
 		zap.Int64("delta", *v.Delta),
 	)
-	state, err := s.String()
-	s.logger.Debug("State", zap.String("state", state), zap.Error(err))
 
 	return nil
 }
@@ -93,8 +91,6 @@ func (s *InMemoryMetricsRepository) ReplaceValue(metric *model.Metrics) error {
 		zap.String("name", v.Name),
 		zap.Float64("newValue", *v.Value),
 	)
-	state, err := s.String()
-	s.logger.Debug("State", zap.String("state", state), zap.Error(err))
 
 	return nil
 }
