@@ -25,7 +25,7 @@ func parseFlags() startConig {
 		"",
 		"database connection string (key/value format, e.g. user=postgres password=secret host=localhost port=5432 database=pgx_test sslmode=disable",
 	)
-	key := flag.String("key", "", "HMAC key for signing metrics.")
+	key := flag.String("k", "", "HMAC key for signing metrics.")
 
 	flag.Parse()
 

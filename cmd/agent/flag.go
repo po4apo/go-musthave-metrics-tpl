@@ -18,7 +18,7 @@ func parseFlags() startConf {
 	addr := flag.String("a", "localhost:8080", "addres of the metrics server (host:port)")
 	reportInterval := flag.Int("r", 10, "interval for sending metrics server (second)")
 	pollInterval := flag.Int("p", 2, "interval for collecting metrics")
-	key := flag.String("key", "1234", "HMAC key for signing metrics.")
+	key := flag.String("k", "1234", "HMAC key for signing metrics.")
 
 	flag.Parse()
 
