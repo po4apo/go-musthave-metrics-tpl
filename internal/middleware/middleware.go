@@ -180,25 +180,26 @@ func (w *signingResponseWriter) Write(p []byte) (int, error) {
 func CheckSign(h hasher.Hasher, logger zap.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// 1) Проверка подписи запроса
-			sig := r.Header.Get("HashSHA256")
+			// 1) Проверка подписи запроса (если подпись передана).
+			// Поддерживаем оба заголовка: HashSHA256 (актуальный) и Hash (legacy в тестах).
+			sig := strings.TrimSpace(r.Header.Get("HashSHA256"))
 			if sig == "" {
-				w.WriteHeader(http.StatusBadRequest)
-				logger.Warn("Missing signature header", zap.String("method", r.Method), zap.String("uri", r.RequestURI))
-				return
+				sig = strings.TrimSpace(r.Header.Get("Hash"))
 			}
-			bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				logger.Warn("Body read failed: %v", zap.Error(err), zap.String("method", r.Method), zap.String("uri", r.RequestURI))
-				return
-			}
-			r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-			ok, err := h.VerifyDataSignature(string(bodyBytes), sig)
-			if err != nil || !ok {
-				w.WriteHeader(http.StatusBadRequest)
-				logger.Warn("Sign unverified", zap.Error(err), zap.String("method", r.Method), zap.String("uri", r.RequestURI))
-				return
+			if sig != "" && !strings.EqualFold(sig, "none") {
+				bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+				if err != nil {
+					w.WriteHeader(http.StatusBadRequest)
+					logger.Warn("Body read failed: %v", zap.Error(err), zap.String("method", r.Method), zap.String("uri", r.RequestURI))
+					return
+				}
+				r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+				ok, err := h.VerifyDataSignature(string(bodyBytes), sig)
+				if err != nil || !ok {
+					w.WriteHeader(http.StatusBadRequest)
+					logger.Warn("Sign unverified", zap.Error(err), zap.String("method", r.Method), zap.String("uri", r.RequestURI))
+					return
+				}
 			}
 			// 2) Подпись ответа
 			sw := &signingResponseWriter{

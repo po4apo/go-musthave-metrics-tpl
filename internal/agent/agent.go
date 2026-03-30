@@ -9,6 +9,9 @@ import (
 	"net/http"
 	"runtime"
 
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/mem"
+
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/model"
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/utils/hasher"
 	"go.uber.org/zap"
@@ -48,6 +51,36 @@ func GetMetrics() map[string]float64 {
 		"Sys":           float64(ms.Sys),
 		"TotalAlloc":    float64(ms.TotalAlloc),
 	}
+}
+
+// SystemMetricsCollector собирает системные метрики через gopsutil.
+type SystemMetricsCollector struct{}
+
+// NewSystemMetricsCollector создаёт коллектор системных метрик.
+func NewSystemMetricsCollector() *SystemMetricsCollector {
+	// Первый вызов cpu.Percent инициализирует внутренний baseline gopsutil.
+	cpu.Percent(0, true) //nolint:errcheck
+	return &SystemMetricsCollector{}
+}
+
+// Collect возвращает актуальные системные метрики.
+//
+// :returns: карта имя→значение для TotalMemory, FreeMemory и CPUutilizationN.
+func (c *SystemMetricsCollector) Collect() map[string]float64 {
+	result := make(map[string]float64)
+
+	if vmStat, err := mem.VirtualMemory(); err == nil {
+		result["TotalMemory"] = float64(vmStat.Total)
+		result["FreeMemory"] = float64(vmStat.Free)
+	}
+
+	if percents, err := cpu.Percent(0, true); err == nil {
+		for i, p := range percents {
+			result[fmt.Sprintf("CPUutilization%d", i+1)] = p
+		}
+	}
+
+	return result
 }
 
 type Agent struct {
