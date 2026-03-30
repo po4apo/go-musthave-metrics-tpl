@@ -10,6 +10,8 @@ import (
 	"runtime"
 
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/model"
+	"github.com/po4apo/go-musthave-metrics-tpl/internal/utils/hasher"
+	"go.uber.org/zap"
 )
 
 var client = NewRetryClient()
@@ -48,7 +50,19 @@ func GetMetrics() map[string]float64 {
 	}
 }
 
-func SendMetric(serverAddr string, m model.Metrics) error {
+type Agent struct {
+	Hasher hasher.Hasher
+	Logger zap.Logger
+}
+
+func NewAgent(logger zap.Logger, h hasher.Hasher) (Agent, error) {
+	return Agent{
+		Hasher: h,
+		Logger: logger,
+	}, nil
+}
+
+func (a Agent) SendMetric(serverAddr string, m model.Metrics) error {
 	url := fmt.Sprintf("http://%s/update", serverAddr)
 
 	requestBody, err := json.Marshal(m)
@@ -60,6 +74,14 @@ func SendMetric(serverAddr string, m model.Metrics) error {
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
+	if a.Hasher.Enabled() {
+		sign, err := a.Hasher.SignData(requestBody)
+		if err != nil {
+			return nil
+		}
+		req.Header.Set("HashSHA256", sign)
+	}
+
 	req.Header.Set("Content-Type", "application/json")
 	req.GetBody = func() (io.ReadCloser, error) {
 		return io.NopCloser(bytes.NewReader(requestBody)), nil
@@ -82,7 +104,7 @@ func SendMetric(serverAddr string, m model.Metrics) error {
 }
 
 // SendMetricsBatch отправляет батч метрик на /updates/ с gzip-сжатием.
-func SendMetricsBatch(serverAddr string, metrics []model.Metrics) error {
+func (a Agent) SendMetricsBatch(serverAddr string, metrics []model.Metrics) error {
 	if len(metrics) == 0 {
 		return nil
 	}
@@ -103,6 +125,15 @@ func SendMetricsBatch(serverAddr string, metrics []model.Metrics) error {
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
+
+	if a.Hasher.Enabled() {
+		sign, err := a.Hasher.SignData(jsonData)
+		if err != nil {
+			return nil
+		}
+		req.Header.Set("HashSHA256", sign)
+	}
+
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Content-Encoding", "gzip")
 	req.GetBody = func() (io.ReadCloser, error) {

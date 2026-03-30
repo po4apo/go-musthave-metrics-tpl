@@ -12,6 +12,7 @@ type startConig struct {
 	FileStoregePath string `env:"FILE_STORAGE_PATH"`
 	DatabaseDsn     string `env:"DATABASE_DSN"`
 	Restore         bool   `env:"RESTORE"`
+	Key             string `env:"KEY"`
 }
 
 func parseFlags() startConig {
@@ -24,6 +25,7 @@ func parseFlags() startConig {
 		"",
 		"database connection string (key/value format, e.g. user=postgres password=secret host=localhost port=5432 database=pgx_test sslmode=disable",
 	)
+	key := flag.String("k", "", "HMAC key for signing metrics.")
 
 	flag.Parse()
 
@@ -33,6 +35,7 @@ func parseFlags() startConig {
 		FileStoregePath: *fileStoregePath,
 		DatabaseDsn:     *databaseDsn,
 		Restore:         *restore,
+		Key:             *key,
 	}
 
 	env.Parse(&conf)

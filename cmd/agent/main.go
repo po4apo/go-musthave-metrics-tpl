@@ -7,6 +7,7 @@ import (
 
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/agent"
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/model"
+	"github.com/po4apo/go-musthave-metrics-tpl/internal/utils/hasher"
 	"go.uber.org/zap"
 )
 
@@ -24,6 +25,14 @@ func main() {
 	iterationCount := 0
 	pollCount := int64(0)
 	latestGauges := make(map[string]float64)
+	_hasher, err := hasher.NewHasher(*logger.With(zap.String("component", "Hasher")), startConf.Key)
+	if err != nil {
+		panic(fmt.Sprintf("failed to inittialize hasher: %v", err))
+	}
+	a, err := agent.NewAgent(*logger.With(zap.String("component", "Agent")), _hasher)
+	if err != nil {
+		panic(fmt.Sprintf("failed to inittialize agent: %v", err))
+	}
 
 	for {
 		// получение метрик машины
@@ -58,7 +67,7 @@ func main() {
 				Delta: &delta,
 			})
 
-			if err := agent.SendMetricsBatch(startConf.Addr, batch); err != nil {
+			if err := a.SendMetricsBatch(startConf.Addr, batch); err != nil {
 				logger.Warn("batch send failed", zap.Error(err))
 			}
 
