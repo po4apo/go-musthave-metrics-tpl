@@ -9,7 +9,12 @@ import (
 	"net/http"
 	"runtime"
 
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/mem"
+
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/model"
+	"github.com/po4apo/go-musthave-metrics-tpl/internal/utils/hasher"
+	"go.uber.org/zap"
 )
 
 var client = NewRetryClient()
@@ -48,7 +53,49 @@ func GetMetrics() map[string]float64 {
 	}
 }
 
-func SendMetric(serverAddr string, m model.Metrics) error {
+// SystemMetricsCollector собирает системные метрики через gopsutil.
+type SystemMetricsCollector struct{}
+
+// NewSystemMetricsCollector создаёт коллектор системных метрик.
+func NewSystemMetricsCollector() *SystemMetricsCollector {
+	// Первый вызов cpu.Percent инициализирует внутренний baseline gopsutil.
+	cpu.Percent(0, true) //nolint:errcheck
+	return &SystemMetricsCollector{}
+}
+
+// Collect возвращает актуальные системные метрики.
+//
+// :returns: карта имя→значение для TotalMemory, FreeMemory и CPUutilizationN.
+func (c *SystemMetricsCollector) Collect() map[string]float64 {
+	result := make(map[string]float64)
+
+	if vmStat, err := mem.VirtualMemory(); err == nil {
+		result["TotalMemory"] = float64(vmStat.Total)
+		result["FreeMemory"] = float64(vmStat.Free)
+	}
+
+	if percents, err := cpu.Percent(0, true); err == nil {
+		for i, p := range percents {
+			result[fmt.Sprintf("CPUutilization%d", i+1)] = p
+		}
+	}
+
+	return result
+}
+
+type Agent struct {
+	Hasher hasher.Hasher
+	Logger zap.Logger
+}
+
+func NewAgent(logger zap.Logger, h hasher.Hasher) (Agent, error) {
+	return Agent{
+		Hasher: h,
+		Logger: logger,
+	}, nil
+}
+
+func (a Agent) SendMetric(serverAddr string, m model.Metrics) error {
 	url := fmt.Sprintf("http://%s/update", serverAddr)
 
 	requestBody, err := json.Marshal(m)
@@ -60,6 +107,14 @@ func SendMetric(serverAddr string, m model.Metrics) error {
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
+	if a.Hasher.Enabled() {
+		sign, err := a.Hasher.SignData(requestBody)
+		if err != nil {
+			return nil
+		}
+		req.Header.Set("HashSHA256", sign)
+	}
+
 	req.Header.Set("Content-Type", "application/json")
 	req.GetBody = func() (io.ReadCloser, error) {
 		return io.NopCloser(bytes.NewReader(requestBody)), nil
@@ -82,7 +137,7 @@ func SendMetric(serverAddr string, m model.Metrics) error {
 }
 
 // SendMetricsBatch отправляет батч метрик на /updates/ с gzip-сжатием.
-func SendMetricsBatch(serverAddr string, metrics []model.Metrics) error {
+func (a Agent) SendMetricsBatch(serverAddr string, metrics []model.Metrics) error {
 	if len(metrics) == 0 {
 		return nil
 	}
@@ -103,6 +158,15 @@ func SendMetricsBatch(serverAddr string, metrics []model.Metrics) error {
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
+
+	if a.Hasher.Enabled() {
+		sign, err := a.Hasher.SignData(jsonData)
+		if err != nil {
+			return nil
+		}
+		req.Header.Set("HashSHA256", sign)
+	}
+
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Content-Encoding", "gzip")
 	req.GetBody = func() (io.ReadCloser, error) {

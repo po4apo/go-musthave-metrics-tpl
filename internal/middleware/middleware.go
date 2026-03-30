@@ -3,11 +3,13 @@ package middleware
 import (
 	"bytes"
 	"compress/gzip"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/po4apo/go-musthave-metrics-tpl/internal/utils/hasher"
 	"go.uber.org/zap"
 )
 
@@ -47,9 +49,9 @@ func CustomLogger(logger *zap.Logger) func(http.Handler) http.Handler {
 
 			// Логирование body для методов с телом
 			var bodyLog string
-		if r.Body != nil && (method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch) {
-			const maxBodySize = 1 * 1024 * 1024 // 1MB
-			bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, maxBodySize))
+			if r.Body != nil && (method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch) {
+				const maxBodySize = 1 * 1024 * 1024 // 1MB
+				bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, maxBodySize))
 				if err == nil {
 					bodyLog = string(bodyBytes)
 					// Восстанавливаем body для следующего обработчика
@@ -144,6 +146,86 @@ func CompressGzip() func(http.Handler) http.Handler {
 			}
 
 			next.ServeHTTP(ow, r)
+		})
+	}
+}
+
+type signingResponseWriter struct {
+	http.ResponseWriter
+	hasher      hasher.Hasher
+	status      int
+	wroteHeader bool
+	body        bytes.Buffer
+	maxBodySize int64
+}
+
+func (w *signingResponseWriter) WriteHeader(code int) {
+	if w.wroteHeader {
+		return
+	}
+	w.status = code
+	w.wroteHeader = true
+}
+func (w *signingResponseWriter) Write(p []byte) (int, error) {
+	if !w.wroteHeader {
+		w.status = http.StatusOK
+		w.wroteHeader = true
+	}
+	if int64(w.body.Len()+len(p)) > w.maxBodySize {
+		return 0, errors.New("response body too large to sign")
+	}
+	return w.body.Write(p)
+}
+
+func CheckSign(h hasher.Hasher, logger zap.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// 1) Проверка подписи запроса (если подпись передана).
+			// Поддерживаем оба заголовка: HashSHA256 (актуальный) и Hash (legacy в тестах).
+			sig := strings.TrimSpace(r.Header.Get("HashSHA256"))
+			if sig == "" {
+				sig = strings.TrimSpace(r.Header.Get("Hash"))
+			}
+			if sig != "" && !strings.EqualFold(sig, "none") {
+				bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+				if err != nil {
+					w.WriteHeader(http.StatusBadRequest)
+					logger.Warn("Body read failed: %v", zap.Error(err), zap.String("method", r.Method), zap.String("uri", r.RequestURI))
+					return
+				}
+				r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+				ok, err := h.VerifyDataSignature(string(bodyBytes), sig)
+				if err != nil || !ok {
+					w.WriteHeader(http.StatusBadRequest)
+					logger.Warn("Sign unverified", zap.Error(err), zap.String("method", r.Method), zap.String("uri", r.RequestURI))
+					return
+				}
+			}
+			// 2) Подпись ответа
+			sw := &signingResponseWriter{
+				ResponseWriter: w,
+				hasher:         h,
+				status:         http.StatusOK,
+				wroteHeader:    false,
+				maxBodySize:    1 << 20, // подними, если будет большой HTML на /
+			}
+			next.ServeHTTP(sw, r)
+			// На случай, если хендлер вообще ничего не писал
+			if !sw.wroteHeader {
+				sw.status = http.StatusOK
+				sw.wroteHeader = true
+			}
+			// Подпись от тела (несжатые байты)
+			sign, err := sw.hasher.SignData(sw.body.Bytes())
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				logger.Warn("Data sign unseccessfully", zap.Error(err))
+				return
+			}
+			// Ставим заголовок подписи ДО записи заголовков ответа
+			sw.Header().Set("HashSHA256", sign)
+			sw.ResponseWriter.WriteHeader(sw.status)
+			_, _ = sw.ResponseWriter.Write(sw.body.Bytes())
 		})
 	}
 }
