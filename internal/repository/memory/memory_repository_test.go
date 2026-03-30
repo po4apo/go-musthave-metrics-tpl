@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/model"
+	repoerrors "github.com/po4apo/go-musthave-metrics-tpl/internal/repository/errors"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )
@@ -105,7 +106,7 @@ func TestErrFieldUndefineIncreaseValue(t *testing.T) {
 				m2 := model.NewCounterMetrics("test1", tt.secondaryValue)
 				err = ms.IncreaseValue(&m2)
 				assert.Error(t, err)
-				assert.ErrorAs(t, err, &ErrFieldUndefine)
+				assert.ErrorAs(t, err, &repoerrors.ErrFieldUndefine)
 			},
 		)
 	}
@@ -207,7 +208,7 @@ func TestErrFieldUndefineReplaceValue(t *testing.T) {
 				m2 := model.NewGaugeMetric("test1", tt.secondaryValue)
 				err = ms.ReplaceValue(&m2)
 				assert.Error(t, err)
-				assert.ErrorAs(t, err, &ErrFieldUndefine)
+				assert.ErrorAs(t, err, &repoerrors.ErrFieldUndefine)
 			},
 		)
 	}
@@ -225,9 +226,76 @@ func TestErrUnsupportedTypeReplaceValue(t *testing.T) {
 			m1 := model.NewCounterMetrics("test1", model.Ptr(int64(1)))
 			err := ms.ReplaceValue(&m1)
 			assert.Error(t, err)
-			assert.ErrorAs(t, err, &ErrUnsupportedType)
+			assert.ErrorAs(t, err, &repoerrors.ErrUnsupportedType)
 		},
 	)
+}
+
+func TestBatchUpdate(t *testing.T) {
+	tests := []struct {
+		name    string
+		metrics []model.Metrics
+		want    map[string]model.Metrics
+	}{
+		{
+			name: "Батч с gauge и counter",
+			metrics: []model.Metrics{
+				model.NewGaugeMetric("g1", model.Ptr(1.5)),
+				model.NewCounterMetrics("c1", model.Ptr(int64(10))),
+			},
+			want: map[string]model.Metrics{
+				"gauge_g1":   model.NewGaugeMetric("g1", model.Ptr(1.5)),
+				"counter_c1": model.NewCounterMetrics("c1", model.Ptr(int64(10))),
+			},
+		},
+		{
+			name: "Counter суммируется внутри батча",
+			metrics: []model.Metrics{
+				model.NewCounterMetrics("c1", model.Ptr(int64(3))),
+				model.NewCounterMetrics("c1", model.Ptr(int64(7))),
+			},
+			want: map[string]model.Metrics{
+				"counter_c1": model.NewCounterMetrics("c1", model.Ptr(int64(10))),
+			},
+		},
+		{
+			name: "Gauge перезаписывается последним значением",
+			metrics: []model.Metrics{
+				model.NewGaugeMetric("g1", model.Ptr(1.0)),
+				model.NewGaugeMetric("g1", model.Ptr(9.9)),
+			},
+			want: map[string]model.Metrics{
+				"gauge_g1": model.NewGaugeMetric("g1", model.Ptr(9.9)),
+			},
+		},
+		{
+			name:    "Пустой батч",
+			metrics: []model.Metrics{},
+			want:    map[string]model.Metrics{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Helper()
+			logger, _ := zap.NewDevelopment()
+			ms, _ := NewMemStorage(logger)
+
+			err := ms.BatchUpdate(tt.metrics)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.want, ms.metrics)
+		})
+	}
+}
+
+func TestBatchUpdateUnknownType(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+	ms, _ := NewMemStorage(logger)
+
+	err := ms.BatchUpdate([]model.Metrics{
+		{Name: "bad", MType: "unknown"},
+	})
+	assert.Error(t, err)
 }
 
 func TestErrUnsupportedTypeIncreaseValue(t *testing.T) {
@@ -241,7 +309,7 @@ func TestErrUnsupportedTypeIncreaseValue(t *testing.T) {
 			m1 := model.NewGaugeMetric("test1", model.Ptr(1.0))
 			err := ms.IncreaseValue(&m1)
 			assert.Error(t, err)
-			assert.ErrorAs(t, err, &ErrUnsupportedType)
+			assert.ErrorAs(t, err, &repoerrors.ErrUnsupportedType)
 		},
 	)
 }

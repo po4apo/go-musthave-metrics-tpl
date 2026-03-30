@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -11,6 +12,8 @@ import (
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/handler"
 	internalMiddleware "github.com/po4apo/go-musthave-metrics-tpl/internal/middleware"
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/repository"
+	memrepo "github.com/po4apo/go-musthave-metrics-tpl/internal/repository/memory"
+	pgrepo "github.com/po4apo/go-musthave-metrics-tpl/internal/repository/pg"
 	"go.uber.org/zap"
 )
 
@@ -23,6 +26,10 @@ func main() {
 }
 
 func run(config startConig) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var repo repository.MetricsRepository
 	logger, err := zap.NewDevelopment()
 
 	if err != nil {
@@ -31,39 +38,52 @@ func run(config startConig) error {
 	defer logger.Sync()
 
 	logger.Info("Server starting", zap.String("addr", config.Addr))
-
-	repo, err := repository.NewMemStorage(logger)
-	if err != nil {
-		return fmt.Errorf("failed to inittialize storage: %w", err)
+	if config.DatabaseDsn != "" {
+		repo, err = pgrepo.NewPostgresStorage(ctx, logger.With(zap.String("component", "PostgresStorage")), config.DatabaseDsn)
+		if err != nil {
+			return fmt.Errorf("failed to inittialize pg storage: %w", err)
+		}
+	} else {
+		repo, err = memrepo.NewMemStorage(logger.With(zap.String("component", "MemStorage")))
+		if err != nil {
+			return fmt.Errorf("failed to inittialize storage: %w", err)
+		}
 	}
 
-	dumper, err := repository.NewMapDumper(
-		&repo,
-		config.StoreInterval,
-		config.FileStoregePath,
-		config.Restore,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to inittialize dumper %w", err)
+	v, ok := repo.(*memrepo.InMemoryMetricsRepository)
+	if ok {
+		dumper, err := memrepo.NewMapDumper(
+			v,
+			config.StoreInterval,
+			config.FileStoregePath,
+			config.Restore,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to inittialize dumper %w", err)
+		}
+
+		if err := dumper.RunMapDumper(ctx); err != nil {
+			return fmt.Errorf("failed to run dumper %w", err)
+		}
 	}
 
-	_, err = dumper.RunMapDumper()
-	if err != nil {
-		return fmt.Errorf("failed to run dumper %w", err)
-	}
+	h, err := handler.NewHandler(repo, logger.With(zap.String("component", "Handler")))
 
 	r := chi.NewRouter()
-	r.Use(internalMiddleware.CustomLogger(logger))
 	r.Use(internalMiddleware.CompressGzip())
+	r.Use(internalMiddleware.CustomLogger(logger.With(zap.String("component", "httpLogger"))))
 	r.Use(middleware.Timeout(30 * time.Second))
 
-	r.Get("/", handler.ViewMetrics(&repo))
-	r.Post("/update/{type}/{name}/{value}", handler.UpdateMetricsHandler(&repo))
-	r.Post("/update", handler.UpdateMetricsWithBodyHandler(&repo))
-	r.Post("/update/", handler.UpdateMetricsWithBodyHandler(&repo))
-	r.Get("/value/{type}/{name}", handler.GetMetricHandler(&repo))
-	r.Post("/value", handler.GetMetricWithBodyHandler(&repo))
-	r.Post("/value/", handler.GetMetricWithBodyHandler(&repo))
+	r.Get("/", h.ViewMetrics(repo))
+	r.Get("/ping", h.PingDBHandler(repo))
+	r.Post("/update/{type}/{name}/{value}", h.UpdateMetricsHandler(repo))
+	r.Post("/update", h.UpdateMetricsWithBodyHandler())
+	r.Post("/update/", h.UpdateMetricsWithBodyHandler())
+	r.Post("/updates", h.UpdateMetricsBatchHandler(repo))
+	r.Post("/updates/", h.UpdateMetricsBatchHandler(repo))
+	r.Get("/value/{type}/{name}", h.GetMetricHandler(repo))
+	r.Post("/value", h.GetMetricWithBodyHandler(repo))
+	r.Post("/value/", h.GetMetricWithBodyHandler(repo))
 
 	if err = http.ListenAndServe(config.Addr, r); err != nil {
 		return fmt.Errorf("failed to start server: %w", err)

@@ -35,7 +35,6 @@ func (w *loggingResponseWriter) WriteHeader(statusCode int) {
 }
 
 func CustomLogger(logger *zap.Logger) func(http.Handler) http.Handler {
-	logger = logger.With(zap.String("component", "httpLogger"))
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			lwr := loggingResponseWriter{
@@ -48,9 +47,9 @@ func CustomLogger(logger *zap.Logger) func(http.Handler) http.Handler {
 
 			// Логирование body для методов с телом
 			var bodyLog string
-			if r.Body != nil && (method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch) {
-				const maxBodySize = 10 * 1024 // 10KB
-				bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, maxBodySize))
+		if r.Body != nil && (method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch) {
+			const maxBodySize = 1 * 1024 * 1024 // 1MB
+			bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, maxBodySize))
 				if err == nil {
 					bodyLog = string(bodyBytes)
 					// Восстанавливаем body для следующего обработчика

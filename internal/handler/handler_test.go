@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/model"
-	"github.com/po4apo/go-musthave-metrics-tpl/internal/repository"
+	memrepo "github.com/po4apo/go-musthave-metrics-tpl/internal/repository/memory"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )
@@ -105,12 +105,13 @@ func TestUpdateMetricsHandler(t *testing.T) {
 			func(t *testing.T) {
 				t.Helper()
 				logger := newLogger()
-				repo, _ := repository.NewMemStorage(logger)
+				repo, _ := memrepo.NewMemStorage(logger)
+				h, _ := NewHandler(repo, logger)
 				res := makeRequest(
 					"/update/{type}/{name}/{value}",
 					http.MethodPost,
 					tt.request,
-					UpdateMetricsHandler(&repo),
+					h.UpdateMetricsHandler(repo),
 					nil,
 				)
 
@@ -189,7 +190,8 @@ func TestUpdateMetricsWithBodyHandler(t *testing.T) {
 			func(t *testing.T) {
 				t.Helper()
 				logger := newLogger()
-				repo, _ := repository.NewMemStorage(logger)
+				repo, _ := memrepo.NewMemStorage(logger)
+				h, _ := NewHandler(repo, logger)
 
 				bBody, err := json.Marshal(tt.body)
 				assert.NoError(t, err)
@@ -198,7 +200,7 @@ func TestUpdateMetricsWithBodyHandler(t *testing.T) {
 					endpoint,
 					http.MethodPost,
 					endpoint,
-					UpdateMetricsWithBodyHandler(&repo),
+					h.UpdateMetricsWithBodyHandler(),
 					bytes.NewReader(bBody),
 				)
 
@@ -248,8 +250,9 @@ func TestUpdateMetricsWithBodyHandlerChangeValue(t *testing.T) {
 					model.NewCounterMetrics("test_counter", model.Ptr(int64(1))),
 				}
 				logger := newLogger()
-				repo, _ := repository.NewMemStorage(logger)
+				repo, _ := memrepo.NewMemStorage(logger)
 				repo.SetStateFromSlice(&repoState)
+				h, _ := NewHandler(repo, logger)
 
 				bBody, err := json.Marshal(tt.body)
 				assert.NoError(t, err)
@@ -258,7 +261,7 @@ func TestUpdateMetricsWithBodyHandlerChangeValue(t *testing.T) {
 					endpoint,
 					http.MethodPost,
 					endpoint,
-					UpdateMetricsWithBodyHandler(&repo),
+					h.UpdateMetricsWithBodyHandler(),
 					bytes.NewReader(bBody),
 				)
 
@@ -330,14 +333,15 @@ func TestGetMetricHandler(t *testing.T) {
 					model.NewCounterMetrics("test_counter", model.Ptr(int64(1))),
 				}
 				logger := newLogger()
-				repo, _ := repository.NewMemStorage(logger)
+				repo, _ := memrepo.NewMemStorage(logger)
 				repo.SetStateFromSlice(&repoState)
+				h, _ := NewHandler(repo, logger)
 
 				res := makeRequest(
 					"/value/{type}/{name}",
 					http.MethodGet,
 					tt.request,
-					GetMetricHandler(&repo),
+					h.GetMetricHandler(repo),
 					nil,
 				)
 
@@ -355,6 +359,100 @@ func TestGetMetricHandler(t *testing.T) {
 	}
 }
 
+func TestUpdateMetricsBatchHandler(t *testing.T) {
+	const endpoint = "/updates/"
+
+	type Want struct {
+		code int
+	}
+
+	tests := []struct {
+		name string
+		body interface{}
+		want Want
+	}{
+		{
+			name: "Батч gauge и counter",
+			body: []model.Metrics{
+				model.NewGaugeMetric("bg", model.Ptr(1.1)),
+				model.NewCounterMetrics("bc", model.Ptr(int64(5))),
+			},
+			want: Want{code: http.StatusOK},
+		},
+		{
+			name: "Пустой батч",
+			body: []model.Metrics{},
+			want: Want{code: http.StatusOK},
+		},
+		{
+			name: "Невалидный JSON",
+			body: "not-json",
+			want: Want{code: http.StatusBadRequest},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Helper()
+			logger := newLogger()
+			repo, _ := memrepo.NewMemStorage(logger)
+			h, _ := NewHandler(repo, logger)
+
+			var bodyReader io.Reader
+			switch v := tt.body.(type) {
+			case string:
+				bodyReader = bytes.NewReader([]byte(v))
+			default:
+				bBody, err := json.Marshal(v)
+				assert.NoError(t, err)
+				bodyReader = bytes.NewReader(bBody)
+			}
+
+			res := makeRequest(
+				endpoint,
+				http.MethodPost,
+				endpoint,
+				h.UpdateMetricsBatchHandler(repo),
+				bodyReader,
+			)
+			defer res.Body.Close()
+
+			assert.Equal(t, tt.want.code, res.StatusCode)
+		})
+	}
+}
+
+func TestUpdateMetricsBatchHandlerVerifyValues(t *testing.T) {
+	logger := newLogger()
+	repo, _ := memrepo.NewMemStorage(logger)
+	h, _ := NewHandler(repo, logger)
+
+	batch := []model.Metrics{
+		model.NewGaugeMetric("tg", model.Ptr(3.14)),
+		model.NewCounterMetrics("tc", model.Ptr(int64(2))),
+		model.NewCounterMetrics("tc", model.Ptr(int64(3))),
+	}
+	bBody, _ := json.Marshal(batch)
+
+	res := makeRequest(
+		"/updates/",
+		http.MethodPost,
+		"/updates/",
+		h.UpdateMetricsBatchHandler(repo),
+		bytes.NewReader(bBody),
+	)
+	res.Body.Close()
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+
+	g, err := repo.GetMetric(model.GenerateID(model.Gauge, "tg"))
+	assert.NoError(t, err)
+	assert.InDelta(t, 3.14, *g.Value, 0.001)
+
+	c, err := repo.GetMetric(model.GenerateID(model.Counter, "tc"))
+	assert.NoError(t, err)
+	assert.Equal(t, int64(5), *c.Delta)
+}
+
 func TestViewMetrics(t *testing.T) {
 
 	t.Run(
@@ -367,14 +465,15 @@ func TestViewMetrics(t *testing.T) {
 				model.NewCounterMetrics("test_counter", model.Ptr(int64(1))),
 			}
 			logger := newLogger()
-			repo, _ := repository.NewMemStorage(logger)
+			repo, _ := memrepo.NewMemStorage(logger)
 			repo.SetStateFromSlice(&repoState)
+			h, _ := NewHandler(repo, logger)
 
 			res := makeRequest(
 				"/",
 				http.MethodGet,
 				"/",
-				ViewMetrics(&repo),
+				h.ViewMetrics(repo),
 				nil,
 			)
 

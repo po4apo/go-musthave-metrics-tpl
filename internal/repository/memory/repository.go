@@ -2,17 +2,11 @@ package repository
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/po4apo/go-musthave-metrics-tpl/internal/model"
+	repoerrors "github.com/po4apo/go-musthave-metrics-tpl/internal/repository/errors"
 	"go.uber.org/zap"
-)
-
-var (
-	ErrUnsupportedType = errors.New("the metric type unsupport this action")
-	ErrFieldUndefine   = errors.New("required field is not define")
-	ErrNotFound        = errors.New("notfound")
 )
 
 type InMemoryMetricsRepository struct {
@@ -20,25 +14,28 @@ type InMemoryMetricsRepository struct {
 	logger  *zap.Logger
 }
 
-func NewMemStorage(logger *zap.Logger) (InMemoryMetricsRepository, error) {
+func NewMemStorage(logger *zap.Logger) (*InMemoryMetricsRepository, error) {
 	// размер не будем устанавливать через конфиг, так как это временное решение
 	// в дальнейшем будет полноценная БД
-	l := logger.With(zap.String("component", "MemStorage"))
-	return InMemoryMetricsRepository{
+	logger.Info(
+		"Create mem storage",
+	)
+	return &InMemoryMetricsRepository{
 		metrics: make(map[string]model.Metrics, 128),
-		logger:  l,
+		logger:  logger,
 	}, nil
 }
 
-func (s *InMemoryMetricsRepository) SetStateFromSlice(repoState *[]model.Metrics) {
+func (s *InMemoryMetricsRepository) SetStateFromSlice(repoState *[]model.Metrics) error {
 	for _, m := range *repoState {
 		s.metrics[m.ID] = m
 	}
+	return nil
 }
 
 func (s *InMemoryMetricsRepository) IncreaseValue(metric *model.Metrics) error {
 	if metric.MType != model.Counter {
-		return fmt.Errorf("failed increase %v by %v: %w", metric.Name, metric.Value, ErrUnsupportedType)
+		return fmt.Errorf("failed increase %v by %v: %w", metric.Name, metric.Value, repoerrors.ErrUnsupportedType)
 	}
 	v, exists := s.metrics[metric.ID]
 	if !exists {
@@ -47,7 +44,7 @@ func (s *InMemoryMetricsRepository) IncreaseValue(metric *model.Metrics) error {
 	}
 
 	if metric.Delta == nil {
-		return fmt.Errorf("field \"Delta\" is not define: %w", ErrFieldUndefine)
+		return fmt.Errorf("field \"Delta\" is not define: %w", repoerrors.ErrFieldUndefine)
 	}
 
 	if v.Delta == nil {
@@ -65,14 +62,15 @@ func (s *InMemoryMetricsRepository) IncreaseValue(metric *model.Metrics) error {
 		zap.String("name", v.Name),
 		zap.Int64("delta", *v.Delta),
 	)
-	s.logger.Debug("State", zap.String("state", s.String()))
+	state, err := s.String()
+	s.logger.Debug("State", zap.String("state", state), zap.Error(err))
 
 	return nil
 }
 
 func (s *InMemoryMetricsRepository) ReplaceValue(metric *model.Metrics) error {
 	if metric.MType != model.Gauge {
-		return fmt.Errorf("failed replace %v by %v: %w", metric.Name, metric.Value, ErrUnsupportedType)
+		return fmt.Errorf("failed replace %v by %v: %w", metric.Name, metric.Value, repoerrors.ErrUnsupportedType)
 	}
 
 	v, exists := s.metrics[metric.ID]
@@ -82,7 +80,7 @@ func (s *InMemoryMetricsRepository) ReplaceValue(metric *model.Metrics) error {
 	}
 
 	if metric.Value == nil {
-		return fmt.Errorf("field \"Value\" is not define: %w", ErrFieldUndefine)
+		return fmt.Errorf("field \"Value\" is not define: %w", repoerrors.ErrFieldUndefine)
 	}
 
 	newValue := *metric.Value
@@ -95,15 +93,36 @@ func (s *InMemoryMetricsRepository) ReplaceValue(metric *model.Metrics) error {
 		zap.String("name", v.Name),
 		zap.Float64("newValue", *v.Value),
 	)
-	s.logger.Debug("State", zap.String("state", s.String()))
+	state, err := s.String()
+	s.logger.Debug("State", zap.String("state", state), zap.Error(err))
 
+	return nil
+}
+
+func (s *InMemoryMetricsRepository) BatchUpdate(metrics []model.Metrics) error {
+	for i := range metrics {
+		m := metrics[i]
+		m.ID = model.GenerateID(m.MType, m.Name)
+		switch m.MType {
+		case model.Counter:
+			if err := s.IncreaseValue(&m); err != nil {
+				return err
+			}
+		case model.Gauge:
+			if err := s.ReplaceValue(&m); err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("unknown metric type: %s", m.MType)
+		}
+	}
 	return nil
 }
 
 func (s *InMemoryMetricsRepository) GetMetric(id string) (model.Metrics, error) {
 	metric, ok := s.metrics[id]
 	if !ok {
-		return model.Metrics{}, ErrNotFound
+		return model.Metrics{}, repoerrors.ErrNotFound
 	}
 
 	s.logger.Info(
@@ -121,7 +140,11 @@ func (s *InMemoryMetricsRepository) GetAll() ([]model.Metrics, error) {
 	return r, nil
 }
 
-func (s *InMemoryMetricsRepository) String() string {
+func (s *InMemoryMetricsRepository) Ping() error {
+	return nil
+}
+
+func (s *InMemoryMetricsRepository) String() (string, error) {
 	b, _ := json.MarshalIndent(s.metrics, "", "  ")
-	return string(b)
+	return string(b), nil
 }
